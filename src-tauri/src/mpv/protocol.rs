@@ -98,6 +98,11 @@ impl MpvCommand {
     Self::new(vec!["set_property".into(), name.into(), value.into()])
   }
 
+  /// Set a boolean property.
+  pub fn set_property_bool(name: &str, value: bool) -> Self {
+    Self::new(vec!["set_property".into(), name.into(), value.into()])
+  }
+
   /// Disable a track (set property to "no").
   pub fn disable_track(property: &str) -> Self {
     Self::new(vec!["set_property".into(), property.into(), "no".into()])

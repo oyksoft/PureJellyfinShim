@@ -377,8 +377,18 @@ impl MpvClient {
   }
 
   /// Toggle mute state.
+  ///
+  /// Reads the current value first, then issues a `set_property` with the
+  /// inverted value. This is more reliable than `cycle mute` because the
+  /// JSON-IPC `cycle` command has been observed to silently no-op on some
+  /// MPV builds when the property is a plain `bool` (vs. an enum/list);
+  /// the read-then-set path matches the jMS implementation and works on
+  /// every MPV version we target.
   pub async fn toggle_mute(&self) -> Result<(), MpvError> {
-    self.send(MpvCommand::cycle("mute")).await?;
+    let current = self.get_mute().await?;
+    self
+      .send(MpvCommand::set_property_bool("mute", !current))
+      .await?;
     Ok(())
   }
 
