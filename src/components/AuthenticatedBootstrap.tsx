@@ -1,8 +1,6 @@
 import { createQuery, useQueryClient } from '@tanstack/solid-query';
-import { Effect, Exit } from 'effect';
-import { type JSX, createContext, createEffect, createMemo, onMount, useContext } from 'solid-js';
+import { type JSX, createContext, createEffect, createMemo, useContext } from 'solid-js';
 import { fetchConnectionState } from '~effects/connection';
-import { fetchAppLocalServices } from '~effects/localServices';
 import {
   isLibrarySessionKeyConnected,
   librarySessionKeyFromConnectionExit,
@@ -11,13 +9,10 @@ import {
   runExit,
 } from '~effects/query';
 import type { LibrarySessionKey } from '~effects/query';
-import { setImageProxyBase } from '~utils/imageSource';
 
 /**
  * Shell-level bootstrap read model: the single connection-state observer for
- * the authenticated shell plus application-local readiness. Sidebar, Video
- * Home, and Library Browser consume this context instead of mounting their
- * own connection observers.
+ * the authenticated shell plus application-local readiness.
  */
 export interface AuthenticatedBootstrap {
   readonly sessionKey: () => LibrarySessionKey;
@@ -49,15 +44,6 @@ export function AuthenticatedBootstrapProvider(props: AuthenticatedBootstrapProv
   }));
   const sessionKey = createMemo(() => librarySessionKeyFromConnectionExit(connectionQuery.data));
   const connected = () => isLibrarySessionKeyConnected(sessionKey());
-
-  onMount(() => {
-    void Effect.runPromiseExit(fetchAppLocalServices).then((exit) =>
-      Exit.match(exit, {
-        onFailure: () => setImageProxyBase(null),
-        onSuccess: (services) => setImageProxyBase(services?.imageProxyBase ?? null),
-      }),
-    );
-  });
 
   let mountedSessionSignature: string | null = null;
   createEffect(() => {

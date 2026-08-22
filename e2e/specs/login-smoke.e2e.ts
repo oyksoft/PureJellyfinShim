@@ -12,7 +12,6 @@ describe('compiled Login smoke', () => {
 
     expect(defaults).toEqual({
       deviceName: 'JellyPilot',
-      imageDiskCacheEnabled: true,
       introSkipperMode: 'automatic',
       keybindIntroSkip: 'g',
       keybindNext: 'Shift+>',

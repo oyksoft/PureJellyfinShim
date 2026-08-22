@@ -2,8 +2,18 @@ import { Dialog } from '@ark-ui/solid/dialog';
 import { createForm } from '@tanstack/solid-form';
 import { createMutation, createQuery, useQueryClient } from '@tanstack/solid-query';
 import { Exit, Option } from 'effect';
-import { X } from 'lucide-solid';
-import { Show, createEffect, createSignal } from 'solid-js';
+import {
+  Activity,
+  Bookmark,
+  Globe,
+  Keyboard,
+  Monitor,
+  MonitorPlay,
+  Network,
+  SkipForward,
+  X,
+} from 'lucide-solid';
+import { For, Show, createEffect, createSignal, onMount, onCleanup } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import * as recipes from '~styles/recipes';
 
@@ -17,39 +27,54 @@ import {
   removeSavedServiceProfile,
 } from '../effects/profiles';
 import { queryKeys, runExit } from '../effects/query';
+import { useI18n, type SupportedLocale } from '../i18n';
 import { restoreSavedSession } from '../sessionAccess';
 import LoginPage from './LoginPage';
 import * as styles from './OperationsConsole.styles';
 import ConnectionCard from './OperationsConsole/ConnectionCard';
 import DiagnosticsCard from './OperationsConsole/DiagnosticsCard';
 import IntroSkipCard from './OperationsConsole/IntroSkipCard';
-import LibrarySettingsCard from './OperationsConsole/LibrarySettingsCard';
+import LanguageCard from './OperationsConsole/LanguageCard';
 import PlayerBridgeSettingsCard from './OperationsConsole/PlayerBridgeSettingsCard';
 import SavedServicesCard from './OperationsConsole/SavedServicesCard';
-import SessionCard from './OperationsConsole/SessionCard';
 import ShortcutKeysCard from './OperationsConsole/ShortcutKeysCard';
 import { createOperationsConsoleStore } from './OperationsConsole/store';
 import {
   normalizePreferredSubtitleLanguages,
   parseSubtitleLanguageInput,
 } from './OperationsConsole/subtitleLanguages';
+import SystemCard from './OperationsConsole/SystemCard';
 import { useToast } from './ToastProvider';
-import { Button, ConsoleContainer, ConsoleGrid, PageFooter } from './ui';
+import { Button, PageFooter } from './ui';
 import type { JellyPilotSelectItem } from './ui';
-
-interface OperationsConsoleProps {
-  onSignedOut: () => void;
-}
 
 type ServiceDialogState =
   | { kind: 'add' }
   | { kind: 'reauthenticate'; profile: SavedServiceProfileSummary };
 
-export default function OperationsConsole(props: OperationsConsoleProps) {
+type SettingsSection =
+  | 'language'
+  | 'system'
+  | 'saved-services'
+  | 'connection'
+  | 'player'
+  | 'intro-skip'
+  | 'shortcuts'
+  | 'diagnostics';
+
+export default function OperationsConsole() {
   const { showToast } = useToast();
+  const { t, supportedLocale, setLocale } = useI18n();
   const { state: ui, actions, Provider } = createOperationsConsoleStore();
   const [serviceDialog, setServiceDialog] = createSignal<ServiceDialogState | null>(null);
   const [serviceDialogOpen, setServiceDialogOpen] = createSignal(false);
+  const [activeSection, setActiveSection] = createSignal<SettingsSection>('language');
+
+  const languageOptions: { value: SupportedLocale; label: string }[] = [
+    { value: 'auto', label: 'Auto / 自动' },
+    { value: 'en', label: 'English' },
+    { value: 'zh', label: '简体中文' },
+  ];
 
   const openServiceDialog = (dialog: ServiceDialogState) => {
     setServiceDialog(dialog);
@@ -59,7 +84,71 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
   const [addServicePortalMount, setAddServicePortalMount] = createSignal<HTMLDivElement>();
   const [activatingProfileKey, setActivatingProfileKey] = createSignal<string | null>(null);
   const [removingProfileKey, setRemovingProfileKey] = createSignal<string | null>(null);
-  const [imageCacheEnabledDraft, setImageCacheEnabledDraft] = createSignal<boolean | null>(null);
+  let contentRef: HTMLDivElement | undefined;
+
+  const scrollToSection = (section: SettingsSection) => {
+    setActiveSection(section);
+    const el = contentRef?.querySelector(`[data-section="${section}"]`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  onMount(() => {
+    const root = contentRef;
+    if (!root) return;
+    let frame = 0;
+    const compute = () => {
+      const sections = [...root.querySelectorAll<HTMLElement>('[data-section]')];
+      if (sections.length === 0) return;
+      const rootRect = root.getBoundingClientRect();
+      const triggerLine = rootRect.top + 80;
+      let current: SettingsSection | null = null;
+      for (const section of sections) {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= triggerLine) {
+          current = (section.dataset.section as SettingsSection) ?? null;
+        } else {
+          break;
+        }
+      }
+      if (!current) current = (sections[0]?.dataset.section as SettingsSection) ?? null;
+      if (current) setActiveSection(current);
+    };
+    const onScroll = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(compute);
+    };
+    root.addEventListener('scroll', onScroll, { passive: true });
+    compute();
+    onCleanup(() => {
+      window.cancelAnimationFrame(frame);
+      root.removeEventListener('scroll', onScroll);
+    });
+  });
+
+  interface NavItem {
+    id: SettingsSection;
+    label: () => string;
+    Icon: typeof Network;
+  }
+
+  const mediaNavItems: NavItem[] = [
+    { id: 'language', label: () => t().settings.language, Icon: Globe },
+    { id: 'system', label: () => t().settings.system, Icon: Monitor },
+    { id: 'saved-services', label: () => t().settings.savedServices, Icon: Bookmark },
+    { id: 'connection', label: () => t().settings.connection, Icon: Network },
+  ];
+
+  const playbackNavItems: NavItem[] = [
+    { id: 'player', label: () => t().settings.playerBridgeSettings, Icon: MonitorPlay },
+    { id: 'intro-skip', label: () => t().settings.introSkip, Icon: SkipForward },
+    { id: 'shortcuts', label: () => t().settings.shortcutKeys, Icon: Keyboard },
+    { id: 'diagnostics', label: () => t().settings.diagnostics, Icon: Activity },
+  ];
+
+  const visiblePlaybackNavItems = () =>
+    playbackNavItems.filter(
+      (item) => item.id !== 'intro-skip' || (capabilities()?.introSkipper ?? true),
+    );
 
   let configHydrated = false;
   interface PendingSave {
@@ -131,7 +220,7 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
 
   const form = createForm(() => ({
     defaultValues: {
-      deviceName: 'JellyPilot',
+      deviceName: 'PureJellyfinShim',
       introSkipperMode: 'automatic' as IntroSkipperMode,
       keybindIntroSkip: 'g',
       keybindNext: 'Shift+>',
@@ -145,7 +234,7 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
     const cfg = config();
     if (cfg && !configHydrated) {
       lastSavedConfig = cfg;
-      form.setFieldValue('deviceName', cfg.deviceName ?? 'JellyPilot');
+      form.setFieldValue('deviceName', cfg.deviceName ?? 'PureJellyfinShim');
       form.setFieldValue('mpvPath', cfg.mpvPath ?? '');
       form.setFieldValue('mpvArgs', (cfg.mpvArgs ?? []).join('\n'));
       form.setFieldValue('keybindNext', cfg.keybindNext ?? 'Shift+>');
@@ -158,7 +247,6 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
           cfg.preferredSubtitleLanguages,
         ),
       });
-      setImageCacheEnabledDraft(null);
       form.setFieldValue('introSkipperMode', cfg.introSkipperMode ?? 'automatic');
       configHydrated = true;
     }
@@ -174,11 +262,6 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
   const config = () =>
     configQuery.data && Exit.isSuccess(configQuery.data) ? configQuery.data.value : null;
   const introSkipperMode = () => ui.introSkipperDraft ?? config()?.introSkipperMode ?? 'automatic';
-  const imageDiskCacheEnabled = () =>
-    imageCacheEnabledDraft() ??
-    latestConfigSnapshot?.imageDiskCacheEnabled ??
-    config()?.imageDiskCacheEnabled ??
-    true;
 
   const showPlayerBridgeStatus = (type: 'saving' | 'saved' | 'error', text: string) => {
     if (clearPlayerBridgeStatusTimer) {
@@ -345,22 +428,11 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
     });
   };
 
-  const saveImageDiskCacheEnabled = (enabled: boolean) => {
-    const previous = imageDiskCacheEnabled();
+  const saveStartMinimizedSetting = (value: boolean) => {
     const desired = latestConfigSnapshot ?? lastSavedConfig ?? config();
-    if (desired?.imageDiskCacheEnabled === enabled) {
-      return;
-    }
-
-    setImageCacheEnabledDraft(enabled);
-    queueConfigSave(buildConfigSnapshot({ imageDiskCacheEnabled: enabled }), {
-      onError: () => {
-        setImageCacheEnabledDraft(previous);
-      },
-      onSuccess: () => {
-        setImageCacheEnabledDraft(null);
-      },
-    });
+    if (!desired) return;
+    if (value === desired.startMinimized) return;
+    queueConfigSave(buildConfigSnapshot({ startMinimized: value }));
   };
 
   const addPreferredSubtitleLanguageCodes = (languages: string[]) => {
@@ -419,7 +491,7 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
 
   const handleReconnect = async () => {
     if (!profiles()?.activeProfileKey) {
-      showToast('error', 'No active saved service is available. Choose a saved service.');
+      showToast('error', t().settings.toastNoActiveSavedService);
       return;
     }
 
@@ -427,11 +499,11 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
     try {
       if (await reconnectMutation.mutateAsync()) {
         clearLibraryQueries();
-        showToast('success', 'Reconnected to saved service');
+        showToast('success', t().settings.toastReconnectedToSavedService);
         void connectionQuery.refetch();
         void profilesQuery.refetch();
       } else {
-        showToast('error', 'Could not reconnect to the saved service.');
+        showToast('error', t().settings.toastReconnectFailed);
         void profilesQuery.refetch();
       }
     } finally {
@@ -439,46 +511,31 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
     }
   };
 
+  const handleResetShortcuts = () => {
+    form.setFieldValue('keybindNext', 'Shift+>');
+    form.setFieldValue('keybindPrev', 'Shift+<');
+    if (capabilities()?.introSkipper ?? true) {
+      form.setFieldValue('keybindIntroSkip', 'g');
+    }
+    saveTextSetting('keybindNext', 'Shift+>');
+    saveTextSetting('keybindPrev', 'Shift+<');
+    if (capabilities()?.introSkipper ?? true) {
+      saveTextSetting('keybindIntroSkip', 'g');
+    }
+    showToast('success', t().settings.shortcutResetSuccess);
+  };
+
   const handleDisconnect = async () => {
     actions.beginDisconnect();
     const exit = await disconnectMutation.mutateAsync();
     if (Exit.isSuccess(exit)) {
       clearLibraryQueries();
-      showToast('success', 'Disconnected from Jellyfin');
+      showToast('success', t().settings.toastDisconnected);
       void connectionQuery.refetch();
     } else {
-      showToast('error', commandFailureMessage(exit.cause, 'Disconnect failed'));
+      showToast('error', commandFailureMessage(exit.cause, t().settings.toastDisconnectFailed));
     }
     actions.finishDisconnect();
-  };
-
-  const handleSignOut = async () => {
-    const activeProfileKey = profiles()?.activeProfileKey;
-    if (!activeProfileKey) {
-      props.onSignedOut();
-      return;
-    }
-
-    actions.beginSignOut();
-    setRemovingProfileKey(activeProfileKey);
-    try {
-      const exit = await removeProfileMutation.mutateAsync(activeProfileKey);
-      if (Exit.isSuccess(exit)) {
-        clearLibraryQueries();
-        void connectionQuery.refetch();
-        void profilesQuery.refetch();
-        if (exit.value.profiles.length === 0) {
-          props.onSignedOut();
-        } else {
-          showToast('success', 'Signed out of the active service. Choose another saved service.');
-        }
-      } else {
-        showToast('error', commandFailureMessage(exit.cause, 'Sign out failed'));
-      }
-    } finally {
-      setRemovingProfileKey(null);
-      actions.finishSignOut();
-    }
   };
 
   const handleActivateProfile = async (key: string) => {
@@ -487,7 +544,7 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
       const exit = await activateProfileMutation.mutateAsync(key);
       if (Exit.isSuccess(exit)) {
         clearLibraryQueries();
-        showToast('success', 'Switched active service');
+        showToast('success', t().settings.toastServiceSwitched);
         void connectionQuery.refetch();
         void profilesQuery.refetch();
         return;
@@ -500,12 +557,12 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
         if (profile) {
           openServiceDialog({ kind: 'reauthenticate', profile });
         } else {
-          showToast('error', 'Saved service profile is no longer available');
+          showToast('error', t().settings.toastServiceUnavailable);
         }
         return;
       }
 
-      showToast('error', commandFailureMessage(exit.cause, 'Could not switch service'));
+      showToast('error', commandFailureMessage(exit.cause, t().settings.toastSwitchFailed));
       void profilesQuery.refetch();
     } finally {
       setActivatingProfileKey(null);
@@ -521,7 +578,7 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
     if (profile) {
       openServiceDialog({ kind: 'reauthenticate', profile });
     } else {
-      showToast('error', 'Saved service profile is no longer available');
+      showToast('error', t().settings.toastServiceUnavailable);
     }
   };
 
@@ -535,13 +592,9 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
         }
         void connectionQuery.refetch();
         void profilesQuery.refetch();
-        if (exit.value.profiles.length === 0) {
-          props.onSignedOut();
-        } else {
-          showToast('success', 'Saved service removed');
-        }
+        showToast('success', t().settings.toastServiceRemoved);
       } else {
-        showToast('error', commandFailureMessage(exit.cause, 'Could not remove saved service'));
+        showToast('error', commandFailureMessage(exit.cause, t().settings.toastRemoveFailed));
       }
     } finally {
       setRemovingProfileKey(null);
@@ -551,7 +604,7 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
   const handleAddServiceConnected = () => {
     clearLibraryQueries();
     closeServiceDialog();
-    showToast('success', 'Saved service added and activated');
+    showToast('success', t().settings.toastServiceAdded);
     void connectionQuery.refetch();
     void profilesQuery.refetch();
   };
@@ -559,7 +612,7 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
   const handleReauthenticated = () => {
     clearLibraryQueries();
     closeServiceDialog();
-    showToast('success', 'Signed in and switched service');
+    showToast('success', t().settings.toastSignedIn);
     void connectionQuery.refetch();
     void profilesQuery.refetch();
   };
@@ -569,19 +622,19 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
     const exit = await detectMpvMutation.mutateAsync();
     if (Exit.isSuccess(exit)) {
       Option.match(exit.value, {
-        onNone: () => showToast('warning', 'MPV not found in PATH. Configure the path manually.'),
+        onNone: () => showToast('warning', t().settings.toastMpvNotFound),
         onSome: (path) => {
           form.setFieldValue('mpvPath', path);
           queueConfigSave(buildConfigSnapshot({ mpvPath: path }));
-          showToast('success', 'MPV detected successfully');
+          showToast('success', t().settings.toastMpvDetected);
         },
       });
     } else {
       console.error(
         'Failed to detect MPV:',
-        commandFailureMessage(exit.cause, 'Failed to detect MPV'),
+        commandFailureMessage(exit.cause, t().settings.toastMpvDetectFailed),
       );
-      showToast('error', 'Failed to detect MPV');
+      showToast('error', t().settings.toastMpvDetectFailed);
     }
     actions.finishMpvDetection();
   };
@@ -593,10 +646,73 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
 
   return (
     <Provider>
-      <ConsoleContainer>
-        <ConsoleGrid>
-          <div class={styles.stack}>
+      <div class={styles.settingsLayout}>
+        <nav class={styles.settingsNav}>
+          <For each={mediaNavItems}>
+            {(item) => (
+              <button
+                type="button"
+                class={styles.settingsNavItem}
+                classList={{ [styles.settingsNavItemActive]: activeSection() === item.id }}
+                onClick={() => scrollToSection(item.id)}
+              >
+                <item.Icon size={16} style={{ 'flex-shrink': '0' }} />
+                <span
+                  style={{
+                    overflow: 'hidden',
+                    'text-overflow': 'ellipsis',
+                    'white-space': 'nowrap',
+                  }}
+                >
+                  {item.label()}
+                </span>
+              </button>
+            )}
+          </For>
+          <For each={visiblePlaybackNavItems()}>
+            {(item) => (
+              <button
+                type="button"
+                class={styles.settingsNavItem}
+                classList={{ [styles.settingsNavItemActive]: activeSection() === item.id }}
+                onClick={() => scrollToSection(item.id)}
+              >
+                <item.Icon size={16} style={{ 'flex-shrink': '0' }} />
+                <span
+                  style={{
+                    overflow: 'hidden',
+                    'text-overflow': 'ellipsis',
+                    'white-space': 'nowrap',
+                  }}
+                >
+                  {item.label()}
+                </span>
+              </button>
+            )}
+          </For>
+        </nav>
+
+        <div class={styles.settingsContent} ref={contentRef}>
+          <div class={styles.settingsSection} data-section="language">
+            <LanguageCard
+              t={t()}
+              current={supportedLocale()}
+              options={languageOptions}
+              onSelect={setLocale}
+            />
+          </div>
+
+          <div class={styles.settingsSection} data-section="system">
+            <SystemCard
+              t={t()}
+              startMinimized={config()?.startMinimized ?? false}
+              onStartMinimizedChange={saveStartMinimizedSetting}
+            />
+          </div>
+
+          <div class={styles.settingsSection} data-section="saved-services">
             <SavedServicesCard
+              t={t()}
               profiles={profiles()}
               activatingProfileKey={activatingProfileKey()}
               removingProfileKey={removingProfileKey()}
@@ -605,22 +721,27 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
               onReauthenticateProfile={handleReauthenticateProfile}
               onRemoveProfile={handleRemoveProfile}
             />
+          </div>
 
+          <div class={styles.settingsSection} data-section="connection">
             <ConnectionCard
+              t={t()}
               state={state()}
               canReconnect={Boolean(profiles()?.activeProfileKey)}
               onDisconnect={handleDisconnect}
               onReconnect={handleReconnect}
               onRefresh={handleRefresh}
             />
+          </div>
 
+          <div class={styles.settingsSection} data-section="player">
             <form
-              class={styles.stack}
               onSubmit={(event) => {
                 event.preventDefault();
               }}
             >
               <PlayerBridgeSettingsCard
+                t={t()}
                 form={form}
                 subtitleLanguageSelectItems={subtitleLanguageSelectItems}
                 onSaveTextSetting={(field, value) => {
@@ -638,32 +759,33 @@ export default function OperationsConsole(props: OperationsConsoleProps) {
             </form>
           </div>
 
-          <aside class={styles.stack}>
-            <DiagnosticsCard />
-
-            <LibrarySettingsCard
-              imageDiskCacheEnabled={imageDiskCacheEnabled()}
-              onImageDiskCacheEnabledChange={saveImageDiskCacheEnabled}
-            />
-
-            <Show when={capabilities()?.introSkipper ?? true}>
+          <Show when={capabilities()?.introSkipper ?? true}>
+            <div class={styles.settingsSection} data-section="intro-skip">
               <IntroSkipCard
+                t={t()}
                 currentMode={introSkipperMode()}
                 onModeChange={handleIntroSkipperModeChange}
               />
-            </Show>
+            </div>
+          </Show>
+
+          <div class={styles.settingsSection} data-section="shortcuts">
             <ShortcutKeysCard
+              t={t()}
               form={form}
               showIntroSkipKey={capabilities()?.introSkipper ?? true}
               onSaveTextSetting={saveTextSetting}
+              onResetDefaults={handleResetShortcuts}
             />
+          </div>
 
-            <SessionCard onSignOut={handleSignOut} />
+          <div class={styles.settingsSection} data-section="diagnostics">
+            <DiagnosticsCard t={t()} />
+          </div>
 
-            <PageFooter />
-          </aside>
-        </ConsoleGrid>
-      </ConsoleContainer>
+          <PageFooter />
+        </div>
+      </div>
       <div ref={setAddServicePortalMount} />
       <Dialog.Root
         open={serviceDialogOpen()}

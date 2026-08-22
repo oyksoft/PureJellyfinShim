@@ -2,7 +2,7 @@ import { redirect } from '@tanstack/solid-router';
 
 import { canAccessConsole, resolveAuthenticatedEntry } from './sessionAccess';
 
-export const AUTHENTICATED_HOME_ROUTE = '/library';
+export const AUTHENTICATED_HOME_ROUTE = '/home';
 
 export async function redirectLoggedInUsersToLibrary() {
   if (await canAccessConsole()) {

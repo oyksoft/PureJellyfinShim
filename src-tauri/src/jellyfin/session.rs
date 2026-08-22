@@ -1109,73 +1109,6 @@ impl SessionManager {
       }
     }
   }
-
-  async fn play_library_request(
-    ctx: &PlayContext,
-    mpv_connected: bool,
-    request: VideoLibraryPlayRequest,
-  ) -> Result<(), JellyfinError> {
-    let play_request = Self::resolve_library_play_request(&ctx.client, request).await?;
-
-    Self::report_playback_stopped(&ctx.client, &ctx.state, &ctx.hls).await;
-    Self::handle_play(ctx, mpv_connected, play_request).await
-  }
-
-  async fn resolve_library_play_request(
-    client: &JellyfinClient,
-    request: VideoLibraryPlayRequest,
-  ) -> Result<PlayRequest, JellyfinError> {
-    let item_id = request.item_id.trim().to_string();
-    if item_id.is_empty() {
-      return Err(JellyfinError::HttpError(
-        "Item id is required for Library playback".to_string(),
-      ));
-    }
-
-    let (item_id, start_position_ticks) = match request.mode {
-      VideoLibraryPlayMode::Resume => {
-        let ticks = request
-          .start_position_seconds
-          .map(seconds_to_ticks)
-          .unwrap_or(0)
-          .max(0);
-        if ticks == 0 {
-          return Err(JellyfinError::HttpError(
-            "Resume playback requires a saved position".to_string(),
-          ));
-        }
-        (item_id, Some(ticks))
-      }
-      VideoLibraryPlayMode::Start => (item_id, Some(0)),
-      VideoLibraryPlayMode::Show => {
-        let target = client
-          .library()
-          .next_playable_episode(item_id)
-          .await?
-          .ok_or_else(|| {
-            JellyfinError::HttpError(
-              "No playable next episode is available for this show".to_string(),
-            )
-          })?;
-        (target.item_id, target.start_position_ticks)
-      }
-    };
-
-    Ok(PlayRequest {
-      item_ids: vec![item_id],
-      start_position_ticks,
-      play_command: "PlayNow".to_string(),
-      media_source_id: None,
-      audio_stream_index: request.audio_stream_index,
-      subtitle_stream_index: request.subtitle_stream_index,
-    })
-  }
-
-  /// Start explicit Library Browser playback through the existing playback target path.
-  pub async fn play_library(&self, request: VideoLibraryPlayRequest) -> Result<(), JellyfinError> {
-    Self::play_library_request(&self.play_context(), self.mpv.is_connected(), request).await
-  }
-
   /// Play the next episode. Called from system tray or UI.
   pub async fn play_next_episode(&self) -> Result<(), String> {
     let current_item = {
@@ -1482,35 +1415,6 @@ mod tests {
     })
   }
 
-  fn test_state_with_active_playback() -> RwLock<SessionState> {
-    RwLock::new(SessionState {
-      playback: Some(PlaybackSession {
-        item_id: "old-movie".to_string(),
-        media_source_id: Some("old-source".to_string()),
-        play_session_id: Some("old-play".to_string()),
-        intro_skipper_ranges: Vec::new(),
-        position_ticks: 420_000_000,
-        is_paused: false,
-        is_muted: false,
-        volume: 100,
-        audio_stream_index: None,
-        subtitle_stream_index: None,
-        play_method: "DirectPlay".to_string(),
-        hls_proxy_session_id: None,
-        hls_recovery_attempted: false,
-        hls_recovering: false,
-      }),
-      transport: TransportSnapshot::default(),
-      last_report_time: std::time::Instant::now(),
-      effective_intro_skipper_config: IntroSkipperRuntimeConfig::from(&AppConfig::default()),
-      current_series_id: None,
-      current_item: None,
-      current_media_streams: Vec::new(),
-      series_preferences: HashMap::new(),
-      recorded_notifications: Vec::new(),
-    })
-  }
-
   pub(super) fn test_state_with_intro_range() -> RwLock<SessionState> {
     test_state_with_range(IntroSkipKind::Introduction, 10.0, 80.0)
   }
@@ -1552,275 +1456,6 @@ mod tests {
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
     })
-  }
-
-  #[tokio::test]
-  async fn library_play_replaces_active_playback_and_resumes_from_saved_position() {
-    let (client, requests) = connected_test_client(vec![
-      (
-        "200 OK",
-        r#"{"Id":"00000000-0000-0000-0000-000000000001","Name":"Ada"}"#,
-      ),
-      (
-        "200 OK",
-        r#"{"ServerName":"Jellyfin Home","Version":"10.10.0","Id":"server-1"}"#,
-      ),
-      ("204 No Content", ""),
-      (
-        "200 OK",
-        r#"{"Id":"movie-1","Name":"Detail Movie","Type":"Movie"}"#,
-      ),
-      (
-        "200 OK",
-        r#"{"MediaSources":[{"Id":"source-1","Protocol":"Http","Container":"mkv","MediaStreams":[]}],"PlaySessionId":"play-2"}"#,
-      ),
-      ("204 No Content", ""),
-    ])
-    .await;
-    let client = Arc::new(client);
-    let state = Arc::new(test_state_with_active_playback());
-    let config = Arc::new(test_config());
-    let hls = HlsProxyState::default();
-    let (action_tx, mut action_rx) = mpsc::channel(4);
-    let ctx = PlayContext {
-      client,
-      state: state.clone(),
-      action_tx,
-      hls,
-      app: None,
-      config,
-    };
-
-    SessionManager::play_library_request(
-      &ctx,
-      true,
-      VideoLibraryPlayRequest {
-        item_id: "movie-1".to_string(),
-        mode: VideoLibraryPlayMode::Resume,
-        start_position_seconds: Some(120.0),
-        audio_stream_index: Some(1),
-        subtitle_stream_index: Some(2),
-      },
-    )
-    .await
-    .expect("library resume should replace active playback");
-
-    let action = action_rx
-      .recv()
-      .await
-      .expect("library playback should send a play action");
-    match action {
-      MpvAction::Play {
-        start_position,
-        title,
-        ..
-      } => {
-        assert_eq!(start_position, 120.0);
-        assert_eq!(title, "Detail Movie");
-      }
-      other => panic!("expected play action, got {other:?}"),
-    }
-
-    let playback = state.read().playback.clone().expect("new playback state");
-    assert_eq!(playback.item_id, "movie-1");
-    assert_eq!(playback.position_ticks, 1_200_000_000);
-    assert_eq!(playback.audio_stream_index, Some(1));
-    assert_eq!(playback.subtitle_stream_index, Some(2));
-
-    let captured = requests.lock();
-    assert!(captured[2].starts_with("POST /Sessions/Playing/Stopped "));
-    assert!(captured[2].contains(r#""ItemId":"old-movie""#));
-    assert!(captured[2].contains(r#""PositionTicks":420000000"#));
-    assert!(captured[5].starts_with("POST /Sessions/Playing "));
-    assert!(captured[5].contains(r#""ItemId":"movie-1""#));
-    assert!(captured[5].contains(r#""PositionTicks":1200000000"#));
-  }
-
-  #[tokio::test]
-  async fn library_show_play_resolves_next_up_episode_before_playback() {
-    let series_id = "00000000-0000-0000-0000-000000000071";
-    let episode_id = "00000000-0000-0000-0000-000000000072";
-    let (client, requests) = connected_test_client(vec![
-      (
-        "200 OK",
-        r#"{"Id":"00000000-0000-0000-0000-000000000001","Name":"Ada"}"#,
-      ),
-      (
-        "200 OK",
-        r#"{"ServerName":"Jellyfin Home","Version":"10.10.0","Id":"server-1"}"#,
-      ),
-      (
-        "200 OK",
-        r#"{"Items":[{"Id":"00000000-0000-0000-0000-000000000072","Name":"Next Episode","Type":"Episode","UserData":{"PlaybackPositionTicks":900000000,"Played":false}}],"TotalRecordCount":1}"#,
-      ),
-      (
-        "200 OK",
-        r#"{"Id":"00000000-0000-0000-0000-000000000072","Name":"Next Episode","Type":"Episode","SeriesId":"00000000-0000-0000-0000-000000000071","SeriesName":"Example Show","ParentIndexNumber":1,"IndexNumber":2}"#,
-      ),
-      (
-        "200 OK",
-        r#"{"MediaSources":[{"Id":"source-2","Protocol":"Http","Container":"mkv","MediaStreams":[]}],"PlaySessionId":"play-3"}"#,
-      ),
-      ("204 No Content", ""),
-    ])
-    .await;
-    let client = Arc::new(client);
-    let state = Arc::new(empty_test_state());
-    let config = Arc::new(test_config());
-    let hls = HlsProxyState::default();
-    let (action_tx, mut action_rx) = mpsc::channel(4);
-    let ctx = PlayContext {
-      client,
-      state: state.clone(),
-      action_tx,
-      hls,
-      app: None,
-      config,
-    };
-
-    SessionManager::play_library_request(
-      &ctx,
-      false,
-      VideoLibraryPlayRequest {
-        item_id: series_id.to_string(),
-        mode: VideoLibraryPlayMode::Show,
-        start_position_seconds: None,
-        audio_stream_index: None,
-        subtitle_stream_index: None,
-      },
-    )
-    .await
-    .expect("show play should resolve NextUp and start playback");
-
-    let action = action_rx
-      .recv()
-      .await
-      .expect("show playback should send a play action");
-    match action {
-      MpvAction::Play {
-        start_position,
-        title,
-        ..
-      } => {
-        assert_eq!(start_position, 90.0);
-        assert_eq!(title, "Example Show - S01E02 - Next Episode");
-      }
-      other => panic!("expected play action, got {other:?}"),
-    }
-
-    let playback = state.read().playback.clone().expect("new playback state");
-    assert_eq!(playback.item_id, episode_id);
-    assert_eq!(playback.position_ticks, 900_000_000);
-
-    let captured = requests.lock();
-    assert!(captured[2].starts_with("GET /Shows/NextUp?"));
-    assert!(captured[2].contains("seriesId=00000000-0000-0000-0000-000000000071"));
-    assert!(captured[2].contains("enableResumable=true"));
-    assert!(captured[3].starts_with(
-      "GET /Users/00000000-0000-0000-0000-000000000001/Items/00000000-0000-0000-0000-000000000072 "
-    ));
-    assert!(captured[5].starts_with("POST /Sessions/Playing "));
-    assert!(captured[5].contains(r#""ItemId":"00000000-0000-0000-0000-000000000072""#));
-    assert!(captured[5].contains(r#""PositionTicks":900000000"#));
-  }
-
-  #[tokio::test]
-  async fn emby_library_play_uses_shared_playback_resolution_and_provider_urls() {
-    let (client, requests) = connected_emby_test_client(vec![
-      (
-        "200 OK",
-        r#"{"Id":"00000000-0000-0000-0000-000000000001","Name":"Ada"}"#,
-      ),
-      (
-        "200 OK",
-        r#"{"Id":"movie-emby","Name":"Emby Movie","Type":"Movie"}"#,
-      ),
-      (
-        "200 OK",
-        r#"{"MediaSources":[{"Id":"source-emby","Protocol":"Http","Container":"mp4","SupportsDirectPlay":false,"SupportsDirectStream":true,"SupportsTranscoding":true,"DirectStreamUrl":"/videos/direct-stream.mp4?MediaSourceId=source-emby","TranscodingUrl":"/videos/transcode.m3u8","MediaStreams":[{"Index":1,"Type":"Audio","Language":"eng","DisplayTitle":"English AAC","Codec":"aac","IsDefault":true},{"Index":2,"Type":"Subtitle","Language":"eng","DisplayTitle":"English SRT","Codec":"srt","IsExternal":true}]}],"PlaySessionId":"play-emby"}"#,
-      ),
-      ("204 No Content", ""),
-    ])
-    .await;
-    let client = Arc::new(client);
-    let state = Arc::new(empty_test_state());
-    let config = Arc::new(test_config());
-    let hls = HlsProxyState::default();
-    let (action_tx, mut action_rx) = mpsc::channel(4);
-    let ctx = PlayContext {
-      client,
-      state: state.clone(),
-      action_tx,
-      hls,
-      app: None,
-      config,
-    };
-
-    SessionManager::play_library_request(
-      &ctx,
-      false,
-      VideoLibraryPlayRequest {
-        item_id: "movie-emby".to_string(),
-        mode: VideoLibraryPlayMode::Start,
-        start_position_seconds: None,
-        audio_stream_index: Some(1),
-        subtitle_stream_index: Some(2),
-      },
-    )
-    .await
-    .expect("Emby library play should start playback through shared flow");
-
-    let play_action = action_rx
-      .recv()
-      .await
-      .expect("Emby library playback should send play action");
-    match play_action {
-      MpvAction::Play {
-        url,
-        title,
-        audio_index,
-        subtitle_index,
-        ..
-      } => {
-        assert_eq!(title, "Emby Movie");
-        assert_eq!(audio_index, Some(1));
-        assert_eq!(subtitle_index, None);
-        assert!(
-          url.ends_with("/videos/direct-stream.mp4?MediaSourceId=source-emby&api_key=emby-token")
-        );
-      }
-      other => panic!("expected play action, got {other:?}"),
-    }
-
-    let subtitle_action = action_rx
-      .recv()
-      .await
-      .expect("external Emby subtitle should be loaded separately");
-    match subtitle_action {
-      MpvAction::AddExternalSubtitle(url) => {
-        assert!(
-          url.ends_with("/Videos/movie-emby/source-emby/Subtitles/2/Stream.srt?api_key=emby-token")
-        );
-      }
-      other => panic!("expected external subtitle action, got {other:?}"),
-    }
-
-    let playback = state.read().playback.clone().expect("new playback state");
-    assert_eq!(playback.item_id, "movie-emby");
-    assert_eq!(playback.media_source_id.as_deref(), Some("source-emby"));
-    assert_eq!(playback.play_session_id.as_deref(), Some("play-emby"));
-    assert_eq!(playback.audio_stream_index, Some(1));
-    assert_eq!(playback.subtitle_stream_index, Some(2));
-
-    let captured = requests.lock();
-    assert!(
-      captured[1].starts_with("GET /Users/00000000-0000-0000-0000-000000000001/Items/movie-emby ")
-    );
-    assert!(captured[2].starts_with("POST /Items/movie-emby/PlaybackInfo "));
-    assert!(captured[2].contains(r#""AudioStreamIndex":1"#));
-    assert!(captured[2].contains(r#""SubtitleStreamIndex":2"#));
-    assert!(captured[3].starts_with("POST /Sessions/Playing "));
-    assert!(captured[3].contains(r#""PlayMethod":"DirectStream""#));
   }
 
   #[tokio::test]
@@ -2220,8 +1855,10 @@ mod emby_hls_tests {
   }
 
   fn started_hls_state() -> HlsProxyState {
-    let cache_root =
-      std::env::temp_dir().join(format!("jellypilot-hls-test-{}", uuid::Uuid::new_v4()));
+    let cache_root = std::env::temp_dir().join(format!(
+      "purejellyfinshim-hls-test-{}",
+      uuid::Uuid::new_v4()
+    ));
     let state = HlsProxyState::default();
     state.install(HlsProxy::start(Some(cache_root)));
     state.current().expect("HLS proxy should start for tests");
@@ -2318,13 +1955,14 @@ mod emby_hls_tests {
         app: None,
         config: self.config.clone(),
       };
-      SessionManager::play_library_request(
+      SessionManager::handle_play(
         &ctx,
         false,
-        VideoLibraryPlayRequest {
-          item_id: item_id.to_string(),
-          mode: VideoLibraryPlayMode::Start,
-          start_position_seconds: None,
+        PlayRequest {
+          item_ids: vec![item_id.to_string()],
+          start_position_ticks: Some(0),
+          play_command: "PlayNow".to_string(),
+          media_source_id: None,
           audio_stream_index: Some(1),
           subtitle_stream_index: None,
         },

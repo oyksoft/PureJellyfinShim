@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/solid-query';
 import { RouterProvider } from '@tanstack/solid-router';
 
 import { ToastProvider } from './components/ToastProvider';
+import { I18nProvider } from './i18n';
 import { router } from './router';
 
 const queryClient = new QueryClient({
@@ -19,11 +20,13 @@ const queryClient = new QueryClient({
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ToastProvider>
-      <PopupRoot>
-        <RouterProvider router={router} />
-      </PopupRoot>
-    </ToastProvider>
+    <I18nProvider>
+      <ToastProvider>
+        <PopupRoot>
+          <RouterProvider router={router} />
+        </PopupRoot>
+      </ToastProvider>
+    </I18nProvider>
   </QueryClientProvider>
 );
 

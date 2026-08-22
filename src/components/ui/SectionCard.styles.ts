@@ -11,7 +11,7 @@ export const title = css({
   display: 'flex',
   alignItems: 'center',
   gap: '3',
-  color: 'primary',
+  color: '[#e8eaed]',
   fontSize: '16',
   fontWeight: 'semibold',
   lineHeight: '24',

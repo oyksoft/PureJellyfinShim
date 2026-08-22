@@ -176,45 +176,6 @@ export const addRow = css({
   gap: '2',
 });
 
-export const addButton = css({
-  display: 'inline-flex',
-  height: '14',
-  alignItems: 'center',
-  justifyContent: 'center',
-  borderRadius: '2xl',
-  px: '4',
-  color: 'onSecondaryContainer',
-  fontSize: '14',
-  lineHeight: '20',
-  fontWeight: 'bold',
-  bg: 'secondaryContainer/40',
-  borderWidth: '1px',
-  borderStyle: 'solid',
-  borderColor: 'secondary/20',
-  cursor: 'pointer',
-  minWidth: '[5.5rem]',
-  transform: '[scale3d(1, 1, 1)]',
-  transitionDuration: '200',
-  transitionProperty: '[background-color, border-color, transform]',
-  _hover: {
-    bg: 'secondaryContainer/60',
-    borderColor: 'secondary/40',
-  },
-  _active: {
-    transform: '[scale3d(0.96, 0.96, 1)]',
-  },
-  _disabled: {
-    opacity: '[0.5]',
-    pointerEvents: 'none',
-  },
-});
-
-export const plusIcon = css({
-  height: '4',
-  mr: '1',
-  width: '4',
-});
-
 export const empty = css({
   mt: '5',
   borderRadius: '2xl',
@@ -309,13 +270,6 @@ export const itemActions = css({
   gap: '1_5',
 });
 
-export const detectButton = css({
-  minHeight: '14',
-  sm: {
-    minHeight: '[0]',
-  },
-});
-
 export const advancedTrigger = css({
   display: 'inline-flex',
   alignItems: 'center',
@@ -346,21 +300,7 @@ export const advancedTrigger = css({
   },
 });
 
-export const clearButton = css({
-  borderWidth: '1px',
-  borderStyle: 'solid',
-  borderColor: 'outlineVariant',
-  borderRadius: 'xl',
-  fontSize: '13',
-  fontWeight: 'bold',
-  minWidth: '[0]',
-  py: '1',
-  px: '3',
-  _hover: {
-    bg: 'secondary/5',
-    borderColor: 'secondary',
-  },
-});
+export const clearButton = css({});
 
 export const smallIconButton = css({
   bg: 'surfaceContainerHigh/30',
@@ -394,4 +334,9 @@ export const mono = css({
 export const icon4 = css({
   height: '4',
   width: '4',
+});
+
+export const icon4_5 = css({
+  height: 'lg',
+  width: 'lg',
 });

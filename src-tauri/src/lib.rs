@@ -5,20 +5,16 @@ mod auth_profiles;
 mod command;
 mod config;
 mod hls_proxy;
-mod image_cache;
-mod image_proxy;
-mod image_ref;
 mod jellyfin;
 mod mpv;
 mod now_playing;
 mod playback_control;
 mod tray;
+mod tray_i18n;
 
 use command::{ConfigState, JellyfinState, MpvState};
-pub use config::AppConfig;
+pub use config::{AppConfig, Locale};
 use hls_proxy::{HlsProxy, HlsProxyState};
-use image_cache::{ImageCache, ImageCacheState};
-use image_proxy::{ImageProxy, ImageProxyState};
 use jellyfin::JellyfinClient;
 use mpv::MpvClient;
 use parking_lot::RwLock;
@@ -26,7 +22,7 @@ use tauri::{Manager, WindowEvent};
 use tauri_plugin_log::{Target, TargetKind};
 
 #[cfg(all(feature = "webdriver", not(debug_assertions)))]
-compile_error!("JELLYPILOT_WEBDRIVER_REQUIRES_DEBUG_ASSERTIONS");
+compile_error!("PUREJELLYFINSHIM_WEBDRIVER_REQUIRES_DEBUG_ASSERTIONS");
 
 fn logging_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
   tauri_plugin_log::Builder::default()
@@ -46,12 +42,8 @@ pub fn run() {
   let config = Arc::new(RwLock::new(AppConfig::default()));
   let config_state = ConfigState(config.clone());
   let config_for_setup = config.clone();
-  let image_cache_state = ImageCacheState::empty();
-  let image_cache_for_setup = image_cache_state.0.clone();
   let hls_proxy_state = HlsProxyState::default();
   let hls_proxy_for_setup = hls_proxy_state.clone();
-  let image_proxy_state = ImageProxyState::new();
-  let image_proxy_for_setup = image_proxy_state.clone();
 
   // Create MPV client state
   let mpv_client = Arc::new(MpvClient::new(None));
@@ -64,12 +56,19 @@ pub fn run() {
   let jellyfin_state = JellyfinState::new(jellyfin_client, mpv_client, hls_proxy_state);
 
   let app_builder = tauri::Builder::default()
+    .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+      // Bring existing window to front when user launches a second instance
+      if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+      }
+    }))
     .manage(config_state)
-    .manage(image_cache_state)
-    .manage(image_proxy_state)
     .manage(mpv_state)
     .manage(jellyfin_state)
     .invoke_handler(builder.invoke_handler())
+    .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_store::Builder::new().build());
 
   #[cfg(feature = "webdriver")]
@@ -85,26 +84,10 @@ pub fn run() {
 
       // Load config from disk (store plugin is now available)
       let loaded_config = command::load_config_from_store(app.handle());
-      let image_cache = match app.path().app_cache_dir() {
+      match app.path().app_cache_dir() {
         Ok(cache_dir) => {
           mpv_for_setup.set_demuxer_cache_dir(cache_dir.clone());
           hls_proxy_for_setup.install(HlsProxy::start(Some(cache_dir.join("hls"))));
-          match tauri::async_runtime::block_on(ImageCache::init(
-            cache_dir,
-            image_cache::IMAGE_CACHE_MAX_BYTES,
-          )) {
-            Ok(cache) => {
-              image_cache_for_setup.write().replace(Arc::clone(&cache));
-              Some(cache)
-            }
-            Err(e) => {
-              log::warn!(
-                "Image cache unavailable ({}); serving images from origin",
-                e
-              );
-              None
-            }
-          }
         }
         Err(e) => {
           log::warn!(
@@ -112,15 +95,8 @@ pub fn run() {
             e
           );
           hls_proxy_for_setup.install(HlsProxy::start(None));
-          None
         }
-      };
-      let image_proxy_res =
-        ImageProxy::start(jellyfin_for_setup.clone(), image_cache, config.clone());
-      if let Err(e) = &image_proxy_res {
-        log::warn!("Failed to start localhost image proxy: {}", e);
       }
-      image_proxy_for_setup.install(image_proxy_res);
 
       // Apply loaded config to MPV client
       let mpv_path = loaded_config
@@ -135,10 +111,49 @@ pub fn run() {
       jellyfin_for_setup.set_device_name(loaded_config.device_name.clone());
 
       // Store config in state
-      *config_for_setup.write() = loaded_config;
+      *config_for_setup.write() = loaded_config.clone();
+
+      // Show main window unless start_minimized is set
+      if !loaded_config.start_minimized {
+        if let Some(window) = app.get_webview_window("main") {
+          let _ = window.show();
+          let _ = window.set_focus();
+        }
+      }
 
       // Setup system tray
-      if let Err(e) = tray::setup_tray(app) {
+      let locale_str = match loaded_config.locale {
+        config::Locale::Zh => "zh",
+        config::Locale::En => "en",
+        config::Locale::Auto => {
+          // Detect Windows system locale via FFI to GetUserDefaultLCID
+          #[cfg(target_os = "windows")]
+          {
+            #[link(name = "kernel32")]
+            extern "system" {
+              fn GetUserDefaultLCID() -> u32;
+            }
+            let lcid = unsafe { GetUserDefaultLCID() };
+            // LCID for Chinese locales: 0x0004 (LANG_CHINESE) primary lang
+            // Sublanguages: 0x0001 (SIMPLIFIED_CHINESE), 0x0002 (TRADITIONAL_CHINESE)
+            let primary_lang = lcid & 0x3FF;
+            if primary_lang == 0x04 {
+              "zh"
+            } else {
+              "en"
+            }
+          }
+          #[cfg(not(target_os = "windows"))]
+          {
+            std::env::var("LANG")
+              .or_else(|_| std::env::var("LC_ALL"))
+              .or_else(|_| std::env::var("LC_MESSAGES"))
+              .map(|v| if v.starts_with("zh") { "zh" } else { "en" })
+              .unwrap_or("en")
+          }
+        }
+      };
+      if let Err(e) = tray::setup_tray(app.handle(), locale_str) {
         log::error!("Failed to setup system tray: {}", e);
       }
 

@@ -484,7 +484,7 @@ mod tests {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
     let url = format!("ws://{}", listener.local_addr().expect("addr"));
     let expected_user_agent =
-      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 JellyPilot/test";
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 PureJellyfinShim/test";
     let (request_tx, request_rx) = oneshot::channel();
 
     let server = tokio::spawn(async move {

@@ -11,15 +11,9 @@ use crate::auth_profiles::{
   load_profiles, save_profiles, SavedServiceProfileStore, SavedServiceProfiles,
 };
 use crate::config::AppConfig;
-use crate::image_cache::{ImageCacheState, ImageCacheStatus};
-use crate::image_proxy::{AppLocalServices, ImageProxyState};
 use crate::jellyfin::{
   AuthResponse, ConnectionState, Credentials, JellyfinClient, JellyfinError, MediaServerProvider,
-  QuickConnectRequest, QuickConnectStatus, SavedSession, SessionManager, VideoHome,
-  VideoItemDetail, VideoItemStreams, VideoLibraryItem, VideoLibraryPage, VideoLibraryPageRequest,
-  VideoLibraryPlayRequest, VideoLibraryShortcut, VideoSearchPage, VideoSearchRequest,
-  VideoSeasonEpisodes, VideoSeasonEpisodesRequest, VideoShowDetail, VideoUserDataUpdate,
-  VideoUserDataUpdateRequest,
+  QuickConnectRequest, QuickConnectStatus, SavedSession, SessionManager,
 };
 use crate::mpv::{write_input_conf, MpvClient, PropertyValue};
 use crate::playback_control;
@@ -636,189 +630,6 @@ pub fn jellyfin_is_connected(state: State<'_, JellyfinState>) -> bool {
   state.client.login().is_connected()
 }
 
-/// Load the Library Browser Video Home dashboard data.
-#[tauri::command]
-#[specta]
-pub async fn library_video_home(
-  state: State<'_, JellyfinState>,
-) -> Result<VideoHome, CommandError> {
-  state
-    .client
-    .library()
-    .video_home()
-    .await
-    .map_err(jellyfin_err)
-}
-
-/// Load Movies and Shows library shortcuts for Library Browser navigation.
-#[tauri::command]
-#[specta]
-pub async fn library_video_shortcuts(
-  state: State<'_, JellyfinState>,
-) -> Result<Vec<VideoLibraryShortcut>, CommandError> {
-  state
-    .client
-    .library()
-    .library_shortcuts()
-    .await
-    .map_err(jellyfin_err)
-}
-
-/// Resolve the Movies or Shows library shortcut containing the given item, if any.
-#[tauri::command]
-#[specta]
-pub async fn library_item_shortcut(
-  state: State<'_, JellyfinState>,
-  item_id: String,
-) -> Result<Option<VideoLibraryShortcut>, CommandError> {
-  state
-    .client
-    .library()
-    .item_shortcut(item_id)
-    .await
-    .map_err(jellyfin_err)
-}
-
-/// Load one server-paged Movies or Shows library result page.
-#[tauri::command]
-#[specta]
-pub async fn library_browse_video(
-  state: State<'_, JellyfinState>,
-  request: VideoLibraryPageRequest,
-) -> Result<VideoLibraryPage, CommandError> {
-  state
-    .client
-    .library()
-    .browse_video(request)
-    .await
-    .map_err(jellyfin_err)
-}
-
-/// Search Movies, Shows, and Episodes with server paging.
-#[tauri::command]
-#[specta]
-pub async fn library_search_video(
-  state: State<'_, JellyfinState>,
-  request: VideoSearchRequest,
-) -> Result<VideoSearchPage, CommandError> {
-  state
-    .client
-    .library()
-    .search_video(request)
-    .await
-    .map_err(jellyfin_err)
-}
-
-/// Load Movie or Episode details for the Library Browser.
-#[tauri::command]
-#[specta]
-pub async fn library_item_detail(
-  state: State<'_, JellyfinState>,
-  item_id: String,
-) -> Result<VideoItemDetail, CommandError> {
-  state
-    .client
-    .library()
-    .item_detail(item_id)
-    .await
-    .map_err(jellyfin_err)
-}
-
-/// Load slower audio and subtitle metadata after critical item detail.
-#[tauri::command]
-#[specta]
-pub async fn library_item_streams(
-  state: State<'_, JellyfinState>,
-  item_id: String,
-) -> Result<VideoItemStreams, CommandError> {
-  state
-    .client
-    .library()
-    .item_streams(item_id)
-    .await
-    .map_err(jellyfin_err)
-}
-
-/// Load Show details with seasons and the Jellyfin next playable episode.
-#[tauri::command]
-#[specta]
-pub async fn library_show_detail(
-  state: State<'_, JellyfinState>,
-  series_id: String,
-) -> Result<VideoShowDetail, CommandError> {
-  state
-    .client
-    .library()
-    .show_detail(series_id)
-    .await
-    .map_err(jellyfin_err)
-}
-
-/// Load Episodes for one Show season.
-#[tauri::command]
-#[specta]
-pub async fn library_season_episodes(
-  state: State<'_, JellyfinState>,
-  request: VideoSeasonEpisodesRequest,
-) -> Result<VideoSeasonEpisodes, CommandError> {
-  state
-    .client
-    .library()
-    .season_episodes(request)
-    .await
-    .map_err(jellyfin_err)
-}
-
-/// Load similar Movie, Series, and Episode recommendations for a Library item.
-#[tauri::command]
-#[specta]
-pub async fn library_similar_video(
-  state: State<'_, JellyfinState>,
-  item_id: String,
-) -> Result<Vec<VideoLibraryItem>, CommandError> {
-  state
-    .client
-    .library()
-    .similar_video(item_id)
-    .await
-    .map_err(jellyfin_err)
-}
-
-/// Start explicit Library Browser playback through the active Jellyfin session.
-#[tauri::command]
-#[specta]
-pub async fn library_play(
-  app: tauri::AppHandle,
-  state: State<'_, JellyfinState>,
-  request: VideoLibraryPlayRequest,
-) -> Result<(), CommandError> {
-  let session = state
-    .session
-    .read()
-    .clone()
-    .ok_or_else(|| CommandError::invalid_input("Library playback requires an active session"))?;
-
-  session.play_library(request).await.map_err(jellyfin_err)?;
-  playback_control::emit_now_playing_changed(&app, &state).await;
-
-  Ok(())
-}
-
-/// Mutate Jellyfin user data for a Library Browser item.
-#[tauri::command]
-#[specta]
-pub async fn library_update_user_data(
-  state: State<'_, JellyfinState>,
-  request: VideoUserDataUpdateRequest,
-) -> Result<VideoUserDataUpdate, CommandError> {
-  state
-    .client
-    .library()
-    .update_user_data(request)
-    .await
-    .map_err(jellyfin_err)
-}
-
 /// Get the current session data for saving.
 #[tauri::command]
 #[specta]
@@ -1343,6 +1154,42 @@ pub fn config_default() -> AppConfig {
   AppConfig::default()
 }
 
+/// Rebuild the system tray with the current locale.
+#[tauri::command]
+#[specta]
+pub fn rebuild_tray(app: tauri::AppHandle) -> Result<(), String> {
+  use tauri::Manager;
+  let state = app.state::<ConfigState>();
+  let config = state.0.read();
+  let locale_str = match config.locale {
+    crate::config::Locale::Zh => "zh",
+    crate::config::Locale::En => "en",
+    crate::config::Locale::Auto => {
+      #[cfg(target_os = "windows")]
+      {
+        #[link(name = "kernel32")]
+        extern "system" {
+          fn GetUserDefaultLCID() -> u32;
+        }
+        let lcid = unsafe { GetUserDefaultLCID() };
+        let primary_lang = lcid & 0x3FF;
+        if primary_lang == 0x04 {
+          "zh"
+        } else {
+          "en"
+        }
+      }
+      #[cfg(not(target_os = "windows"))]
+      {
+        std::env::var("LANG")
+          .or_else(|_| std::env::var("LC_ALL"))
+          .unwrap_or_else(|_| "en".to_string())
+      }
+    }
+  };
+  crate::tray::rebuild_tray(&app, locale_str).map_err(|e| e.to_string())
+}
+
 /// Detect MPV path automatically.
 #[tauri::command]
 #[specta]
@@ -1352,13 +1199,6 @@ pub fn config_detect_mpv() -> Option<String> {
     // Strip Windows extended-length path prefix for cleaner display
     s.strip_prefix(r"\\?\").map(String::from).unwrap_or(s)
   })
-}
-
-/// Get state of application local services (such as image proxy).
-#[tauri::command]
-#[specta]
-pub fn app_local_services(state: State<'_, ImageProxyState>) -> AppLocalServices {
-  state.local_services()
 }
 
 /// Load config from disk. Called internally during app setup.
@@ -1389,60 +1229,6 @@ pub fn load_config_from_store(app: &tauri::AppHandle) -> AppConfig {
   AppConfig::default()
 }
 
-/// Current Library Image cache status for Library settings.
-#[tauri::command]
-#[specta]
-pub async fn image_cache_status(
-  cache_state: State<'_, ImageCacheState>,
-  config_state: State<'_, ConfigState>,
-) -> Result<ImageCacheStatus, CommandError> {
-  let enabled = config_state.0.read().image_disk_cache_enabled;
-  let cache = cache_state.0.read().clone();
-  let status = match cache {
-    Some(cache) => cache
-      .status(enabled)
-      .await
-      .map_err(|e| CommandError::internal(e.to_string()))?,
-    None => ImageCacheStatus {
-      committed_bytes: 0,
-      entry_count: 0,
-      enabled,
-      clearing: false,
-    },
-  };
-  Ok(status)
-}
-
-/// Clear the entire Library Image Cache across every saved server, returning
-/// the post-clear status. Pre-Clear writers cannot republish across the
-/// destructive epoch; in-flight reads are not broken.
-#[tauri::command]
-#[specta]
-pub async fn image_cache_clear(
-  cache_state: State<'_, ImageCacheState>,
-  config_state: State<'_, ConfigState>,
-) -> Result<ImageCacheStatus, CommandError> {
-  let enabled = config_state.0.read().image_disk_cache_enabled;
-  let cache = cache_state.0.read().clone();
-  let Some(cache) = cache else {
-    return Ok(ImageCacheStatus {
-      committed_bytes: 0,
-      entry_count: 0,
-      enabled,
-      clearing: false,
-    });
-  };
-  cache
-    .clear()
-    .await
-    .map_err(|e| CommandError::internal(e.to_string()))?;
-  let status = cache
-    .status(enabled)
-    .await
-    .map_err(|e| CommandError::internal(e.to_string()))?;
-  Ok(status)
-}
-
 pub fn specta_builder() -> Builder<tauri::Wry> {
   let builder = Builder::<tauri::Wry>::new()
     .commands(collect_commands![
@@ -1460,18 +1246,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
       mpv_get_state,
       mpv_is_connected,
       now_playing_get_state,
-      library_video_home,
-      library_video_shortcuts,
-      library_item_shortcut,
-      library_browse_video,
-      library_search_video,
-      library_item_detail,
-      library_item_streams,
-      library_show_detail,
-      library_season_episodes,
-      library_similar_video,
-      library_play,
-      library_update_user_data,
       // Jellyfin commands
       jellyfin_connect,
       jellyfin_disconnect,
@@ -1507,10 +1281,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
       config_set,
       config_default,
       config_detect_mpv,
-      // Service commands
-      app_local_services,
-      image_cache_status,
-      image_cache_clear,
+      rebuild_tray,
     ])
     .events(collect_events![AppNotification, NowPlayingChanged]);
 

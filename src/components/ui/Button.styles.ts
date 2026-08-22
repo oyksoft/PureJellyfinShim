@@ -28,28 +28,28 @@ export const button = cva({
   variants: {
     size: {
       sm: {
+        borderRadius: 'lg',
+        fontSize: '11',
+        gap: '1',
+        lineHeight: '14',
+        minHeight: '7',
+        padding: '[0.4em 0.6em]',
+      },
+      md: {
         borderRadius: 'xl',
         fontSize: '12',
         gap: '1_5',
         lineHeight: '16',
-        minHeight: '10',
-        padding: '[0.5em 0.75em]',
-      },
-      md: {
-        borderRadius: '2xl',
-        fontSize: '14',
-        gap: '2',
-        lineHeight: '20',
-        minHeight: '11',
-        padding: '[0.875em 1.125em]',
+        minHeight: '8',
+        padding: '[0.6em 0.9em]',
       },
       lg: {
-        borderRadius: '[1.25rem]',
-        fontSize: '16',
-        gap: '2_5',
-        lineHeight: '24',
-        minHeight: '[3.25rem]',
-        padding: '[1.2em 1.45em]',
+        borderRadius: '2xl',
+        fontSize: '13',
+        gap: '2',
+        lineHeight: '20',
+        minHeight: '9',
+        padding: '[0.75em 1em]',
       },
     },
     variant: {
@@ -64,28 +64,26 @@ export const button = cva({
         },
       },
       secondary: {
-        bg: 'secondaryContainer',
+        bg: 'surfaceContainerHigh',
         borderWidth: '1px',
         borderStyle: 'solid',
         borderColor: 'outlineVariant',
-        boxShadow: 'md',
-        color: 'onSecondaryContainer',
+        color: 'onSurface',
         _hover: {
-          borderColor: 'outline',
+          bg: 'surfaceContainerHighest',
         },
         _active: {
           transform: '[translateY(0) scale3d(0.96, 0.96, 1)]',
         },
       },
       tonal: {
-        bg: 'secondaryContainer',
+        bg: 'surfaceContainerHigh',
         borderWidth: '1px',
         borderStyle: 'solid',
         borderColor: 'outlineVariant',
-        boxShadow: 'md',
-        color: 'onSecondaryContainer',
+        color: 'onSurface',
         _hover: {
-          borderColor: 'outline',
+          bg: 'surfaceContainerHighest',
         },
         _active: {
           transform: '[translateY(0) scale3d(0.96, 0.96, 1)]',
@@ -95,21 +93,31 @@ export const button = cva({
         bg: '[transparent]',
         borderWidth: '1px',
         borderStyle: 'solid',
-        borderColor: 'outline',
-        color: 'onSurface',
+        borderColor: 'outlineVariant',
+        color: '[#e8eaed]',
         _hover: {
-          bg: 'primary/5',
+          bg: 'surfaceContainerHigh',
           borderColor: 'primary',
         },
         _active: {
           transform: '[scale3d(0.96, 0.96, 1)]',
         },
       },
+      danger: {
+        bg: '[#dc2626]',
+        color: '[white]',
+        _hover: {
+          bg: '[#ef4444]',
+        },
+        _active: {
+          transform: '[translateY(0) scale3d(0.96, 0.96, 1)]',
+        },
+      },
       text: {
         bg: '[transparent]',
-        color: 'secondary',
+        color: 'primary',
         _hover: {
-          bg: 'secondary/10',
+          bg: 'primary/10',
         },
         _active: {
           transform: '[scale3d(0.96, 0.96, 1)]',
@@ -153,36 +161,31 @@ export const iconButton = cva({
   variants: {
     size: {
       sm: {
-        borderRadius: 'xl',
-        height: '10',
-        minHeight: '10',
-        minWidth: '10',
-        width: '10',
+        borderRadius: 'lg',
+        height: '7',
+        minHeight: '7',
+        minWidth: '7',
+        width: '7',
       },
       md: {
-        borderRadius: '2xl',
-        height: '11',
-        minHeight: '11',
-        minWidth: '11',
-        width: '11',
+        borderRadius: 'xl',
+        height: '8',
+        minHeight: '8',
+        minWidth: '8',
+        width: '8',
       },
       lg: {
-        borderRadius: '[1.25rem]',
-        height: '[3.25rem]',
-        minHeight: '[3.25rem]',
-        minWidth: '[3.25rem]',
-        width: '[3.25rem]',
+        borderRadius: '2xl',
+        height: '9',
+        minHeight: '9',
+        minWidth: '9',
+        width: '9',
       },
-      /*
-       * Full-width row chrome for rail/footer triggers. The variant wins over
-       * base padding and hover via recipe merge; owners must not re-declare
-       * them in a local class (atomic emission order would not guarantee a win).
-       */
       row: {
         borderRadius: 'xl',
         gap: '2',
         height: 'auto',
-        minHeight: '10',
+        minHeight: '9',
         minWidth: '[0]',
         padding: '2',
         width: 'full',

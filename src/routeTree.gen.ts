@@ -12,12 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as AuthenticatedLibraryRouteImport } from './routes/_authenticated/library'
-import { Route as AuthenticatedLibraryIndexRouteImport } from './routes/_authenticated/library/index'
-import { Route as AuthenticatedLibrarySearchRouteImport } from './routes/_authenticated/library/search'
-import { Route as AuthenticatedLibraryCollectionTypeLibraryIdRouteImport } from './routes/_authenticated/library/$collectionType/$libraryId'
-import { Route as AuthenticatedLibraryItemsItemIdRouteImport } from './routes/_authenticated/library/items/$itemId'
-import { Route as AuthenticatedLibraryShowsSeriesIdRouteImport } from './routes/_authenticated/library/shows/$seriesId'
+import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated/home'
+import { Route as AuthenticatedOpsRouteImport } from './routes/_authenticated/ops'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -33,104 +29,49 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedLibraryRoute = AuthenticatedLibraryRouteImport.update({
-  id: '/library',
-  path: '/library',
+const AuthenticatedHomeRoute = AuthenticatedHomeRouteImport.update({
+  id: '/home',
+  path: '/home',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedLibraryIndexRoute =
-  AuthenticatedLibraryIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => AuthenticatedLibraryRoute,
-  } as any)
-const AuthenticatedLibrarySearchRoute =
-  AuthenticatedLibrarySearchRouteImport.update({
-    id: '/search',
-    path: '/search',
-    getParentRoute: () => AuthenticatedLibraryRoute,
-  } as any)
-const AuthenticatedLibraryCollectionTypeLibraryIdRoute =
-  AuthenticatedLibraryCollectionTypeLibraryIdRouteImport.update({
-    id: '/$collectionType/$libraryId',
-    path: '/$collectionType/$libraryId',
-    getParentRoute: () => AuthenticatedLibraryRoute,
-  } as any)
-const AuthenticatedLibraryItemsItemIdRoute =
-  AuthenticatedLibraryItemsItemIdRouteImport.update({
-    id: '/items/$itemId',
-    path: '/items/$itemId',
-    getParentRoute: () => AuthenticatedLibraryRoute,
-  } as any)
-const AuthenticatedLibraryShowsSeriesIdRoute =
-  AuthenticatedLibraryShowsSeriesIdRouteImport.update({
-    id: '/shows/$seriesId',
-    path: '/shows/$seriesId',
-    getParentRoute: () => AuthenticatedLibraryRoute,
-  } as any)
+const AuthenticatedOpsRoute = AuthenticatedOpsRouteImport.update({
+  id: '/ops',
+  path: '/ops',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/library': typeof AuthenticatedLibraryRouteWithChildren
-  '/library/search': typeof AuthenticatedLibrarySearchRoute
-  '/library/': typeof AuthenticatedLibraryIndexRoute
-  '/library/$collectionType/$libraryId': typeof AuthenticatedLibraryCollectionTypeLibraryIdRoute
-  '/library/items/$itemId': typeof AuthenticatedLibraryItemsItemIdRoute
-  '/library/shows/$seriesId': typeof AuthenticatedLibraryShowsSeriesIdRoute
+  '/home': typeof AuthenticatedHomeRoute
+  '/ops': typeof AuthenticatedOpsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/library/search': typeof AuthenticatedLibrarySearchRoute
-  '/library': typeof AuthenticatedLibraryIndexRoute
-  '/library/$collectionType/$libraryId': typeof AuthenticatedLibraryCollectionTypeLibraryIdRoute
-  '/library/items/$itemId': typeof AuthenticatedLibraryItemsItemIdRoute
-  '/library/shows/$seriesId': typeof AuthenticatedLibraryShowsSeriesIdRoute
+  '/home': typeof AuthenticatedHomeRoute
+  '/ops': typeof AuthenticatedOpsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
-  '/_authenticated/library': typeof AuthenticatedLibraryRouteWithChildren
-  '/_authenticated/library/search': typeof AuthenticatedLibrarySearchRoute
-  '/_authenticated/library/': typeof AuthenticatedLibraryIndexRoute
-  '/_authenticated/library/$collectionType/$libraryId': typeof AuthenticatedLibraryCollectionTypeLibraryIdRoute
-  '/_authenticated/library/items/$itemId': typeof AuthenticatedLibraryItemsItemIdRoute
-  '/_authenticated/library/shows/$seriesId': typeof AuthenticatedLibraryShowsSeriesIdRoute
+  '/_authenticated/home': typeof AuthenticatedHomeRoute
+  '/_authenticated/ops': typeof AuthenticatedOpsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/login'
-    | '/library'
-    | '/library/search'
-    | '/library/'
-    | '/library/$collectionType/$libraryId'
-    | '/library/items/$itemId'
-    | '/library/shows/$seriesId'
+  fullPaths: '/' | '/login' | '/home' | '/ops'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/login'
-    | '/library/search'
-    | '/library'
-    | '/library/$collectionType/$libraryId'
-    | '/library/items/$itemId'
-    | '/library/shows/$seriesId'
+  to: '/' | '/login' | '/home' | '/ops'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/login'
-    | '/_authenticated/library'
-    | '/_authenticated/library/search'
-    | '/_authenticated/library/'
-    | '/_authenticated/library/$collectionType/$libraryId'
-    | '/_authenticated/library/items/$itemId'
-    | '/_authenticated/library/shows/$seriesId'
+    | '/_authenticated/home'
+    | '/_authenticated/ops'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -162,78 +103,31 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/library': {
-      id: '/_authenticated/library'
-      path: '/library'
-      fullPath: '/library'
-      preLoaderRoute: typeof AuthenticatedLibraryRouteImport
+    '/_authenticated/home': {
+      id: '/_authenticated/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof AuthenticatedHomeRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/library/': {
-      id: '/_authenticated/library/'
-      path: '/'
-      fullPath: '/library/'
-      preLoaderRoute: typeof AuthenticatedLibraryIndexRouteImport
-      parentRoute: typeof AuthenticatedLibraryRoute
-    }
-    '/_authenticated/library/search': {
-      id: '/_authenticated/library/search'
-      path: '/search'
-      fullPath: '/library/search'
-      preLoaderRoute: typeof AuthenticatedLibrarySearchRouteImport
-      parentRoute: typeof AuthenticatedLibraryRoute
-    }
-    '/_authenticated/library/$collectionType/$libraryId': {
-      id: '/_authenticated/library/$collectionType/$libraryId'
-      path: '/$collectionType/$libraryId'
-      fullPath: '/library/$collectionType/$libraryId'
-      preLoaderRoute: typeof AuthenticatedLibraryCollectionTypeLibraryIdRouteImport
-      parentRoute: typeof AuthenticatedLibraryRoute
-    }
-    '/_authenticated/library/items/$itemId': {
-      id: '/_authenticated/library/items/$itemId'
-      path: '/items/$itemId'
-      fullPath: '/library/items/$itemId'
-      preLoaderRoute: typeof AuthenticatedLibraryItemsItemIdRouteImport
-      parentRoute: typeof AuthenticatedLibraryRoute
-    }
-    '/_authenticated/library/shows/$seriesId': {
-      id: '/_authenticated/library/shows/$seriesId'
-      path: '/shows/$seriesId'
-      fullPath: '/library/shows/$seriesId'
-      preLoaderRoute: typeof AuthenticatedLibraryShowsSeriesIdRouteImport
-      parentRoute: typeof AuthenticatedLibraryRoute
+    '/_authenticated/ops': {
+      id: '/_authenticated/ops'
+      path: '/ops'
+      fullPath: '/ops'
+      preLoaderRoute: typeof AuthenticatedOpsRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
   }
 }
 
-interface AuthenticatedLibraryRouteChildren {
-  AuthenticatedLibrarySearchRoute: typeof AuthenticatedLibrarySearchRoute
-  AuthenticatedLibraryIndexRoute: typeof AuthenticatedLibraryIndexRoute
-  AuthenticatedLibraryCollectionTypeLibraryIdRoute: typeof AuthenticatedLibraryCollectionTypeLibraryIdRoute
-  AuthenticatedLibraryItemsItemIdRoute: typeof AuthenticatedLibraryItemsItemIdRoute
-  AuthenticatedLibraryShowsSeriesIdRoute: typeof AuthenticatedLibraryShowsSeriesIdRoute
-}
-
-const AuthenticatedLibraryRouteChildren: AuthenticatedLibraryRouteChildren = {
-  AuthenticatedLibrarySearchRoute: AuthenticatedLibrarySearchRoute,
-  AuthenticatedLibraryIndexRoute: AuthenticatedLibraryIndexRoute,
-  AuthenticatedLibraryCollectionTypeLibraryIdRoute:
-    AuthenticatedLibraryCollectionTypeLibraryIdRoute,
-  AuthenticatedLibraryItemsItemIdRoute: AuthenticatedLibraryItemsItemIdRoute,
-  AuthenticatedLibraryShowsSeriesIdRoute:
-    AuthenticatedLibraryShowsSeriesIdRoute,
-}
-
-const AuthenticatedLibraryRouteWithChildren =
-  AuthenticatedLibraryRoute._addFileChildren(AuthenticatedLibraryRouteChildren)
-
 interface AuthenticatedRouteChildren {
-  AuthenticatedLibraryRoute: typeof AuthenticatedLibraryRouteWithChildren
+  AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
+  AuthenticatedOpsRoute: typeof AuthenticatedOpsRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
-  AuthenticatedLibraryRoute: AuthenticatedLibraryRouteWithChildren,
+  AuthenticatedHomeRoute: AuthenticatedHomeRoute,
+  AuthenticatedOpsRoute: AuthenticatedOpsRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

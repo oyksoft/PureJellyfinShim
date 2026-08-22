@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 #[cfg(test)]
 pub(crate) fn assert_login_interface(client: &super::client::JellyfinClient) {
   let login = client.login();
@@ -6,6 +7,7 @@ pub(crate) fn assert_login_interface(client: &super::client::JellyfinClient) {
   let _ = login.get_saved_session();
 }
 
+#[allow(dead_code)]
 #[cfg(test)]
 pub(crate) fn assert_playback_interface(client: &super::client::JellyfinClient) {
   let playback = client.playback();

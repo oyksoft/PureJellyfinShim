@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 const LOOKAHEAD_SECONDS: f64 = 1.0;
 
-/// Intro Skipper segment kind supported by JellyPilot.
+/// Intro Skipper segment kind supported by PureJellyfinShim.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IntroSkipKind {
   Introduction,

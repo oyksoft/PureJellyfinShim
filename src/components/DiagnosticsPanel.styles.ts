@@ -14,7 +14,7 @@ export const header = css({
 });
 
 export const count = css({
-  color: 'onSurfaceVariant/80',
+  color: 'onSurfaceVariant',
   fontFamily: 'mono',
   fontSize: '11',
   fontVariantNumeric: 'tabular-nums',
@@ -25,7 +25,7 @@ export const checkboxRoot = css({
   display: 'inline-flex',
   alignItems: 'center',
   gap: '2_5',
-  color: 'onSurfaceVariant/95',
+  color: 'onSurface',
   cursor: 'pointer',
   fontSize: '11',
   fontWeight: 'bold',
@@ -46,129 +46,68 @@ export const checkboxLabel = css({
   userSelect: 'none',
 });
 
-export const log = cva({
+export const logBox = cva({
   base: {
-    overflowY: 'auto',
     borderRadius: '2xl',
-    p: '3',
+    p: '4',
     boxShadow: 'inner',
-    bg: 'surfaceContainerLowest/60',
+    bg: 'surfaceContainerHigh/40',
     borderWidth: '1px',
     borderStyle: 'solid',
     borderColor: 'outlineVariant',
-    display: 'grid',
-    gap: '2_5',
+    fontFamily: 'mono',
+    fontSize: '12',
+    lineHeight: '20',
+    color: 'onSurface',
+    resize: 'none',
+    outline: 'none',
+    cursor: 'text',
+    whiteSpace: 'pre',
+    overflowX: 'scroll',
+    overflowY: 'auto',
+    // Custom scrollbar styling - high contrast indigo accent
+    '&::-webkit-scrollbar': {
+      width: '[12px]',
+      height: '[12px]',
+    },
+    '&::-webkit-scrollbar-track': {
+      bg: 'surfaceContainerLow/50',
+      borderRadius: '[6px]',
+    },
+    '&::-webkit-scrollbar-thumb': {
+      bg: 'primary/70',
+      borderRadius: '[6px]',
+      borderWidth: '2px',
+      borderStyle: 'solid',
+      borderColor: '[transparent]',
+      backgroundClip: 'padding-box',
+      transitionProperty: '[background-color]',
+      transitionDuration: '150',
+    },
+    '&::-webkit-scrollbar-thumb:hover': {
+      bg: 'primary',
+    },
+    '&::-webkit-scrollbar-thumb:active': {
+      bg: 'primary/90',
+    },
+    '&::-webkit-scrollbar-corner': {
+      bg: 'surfaceContainerLow/50',
+    },
+    // Firefox support
+    scrollbarWidth: '[auto]',
+    scrollbarColor:
+      '[color-mix(in_srgb,var(--colors-primary)_70%,transparent)_color-mix(in_srgb,var(--colors-surfaceContainerLow)_50%,transparent)]',
   },
   variants: {
     size: {
       compact: {
-        maxHeight: '[14rem]',
+        height: '[14rem]',
       },
       expanded: {
-        maxHeight: '[24rem]',
+        height: '[24rem]',
       },
     },
   },
-});
-
-export const empty = css({
-  color: 'onSurfaceVariant/60',
-  fontFamily: 'mono',
-  fontSize: '12',
-  lineHeight: '16',
-  py: '10',
-  textAlign: 'center',
-});
-
-export const entry = css({
-  position: 'relative',
-  overflow: 'hidden',
-  borderRadius: 'xl',
-  px: '3_5',
-  py: '2',
-  color: 'onSurfaceVariant',
-  fontFamily: 'mono',
-  fontSize: '12',
-  lineHeight: '20',
-  bg: 'surfaceContainerLowest/70',
-  borderWidth: '1px',
-  borderStyle: 'solid',
-  borderColor: 'outlineVariant/40',
-  transitionProperty: '[background-color, border-color]',
-  _hover: {
-    bg: 'surfaceContainerLowest/90',
-    borderColor: 'outlineVariant/60',
-  },
-});
-
-export const entryInner = css({
-  alignItems: 'center',
-  display: 'flex',
-  flexWrap: 'wrap',
-  columnGap: '3',
-  rowGap: '1_5',
-  position: 'relative',
-  zIndex: '10',
-});
-
-export const time = css({
-  color: 'outline',
-  fontWeight: 'semibold',
-  userSelect: 'none',
-});
-
-export const badge = cva({
-  base: {
-    borderWidth: '1px',
-    borderStyle: 'solid',
-    borderRadius: 'md',
-    fontSize: '10',
-    fontWeight: 'bold',
-    letterSpacing: '5',
-    px: '2',
-    py: '0_5',
-    userSelect: 'none',
-  },
-  variants: {
-    tone: {
-      trace: {
-        bg: 'surfaceContainerHighest',
-        borderColor: 'outlineVariant/40',
-        color: 'outline',
-      },
-      debug: {
-        bg: 'surfaceContainerHighest',
-        borderColor: 'outline/30',
-        color: 'onSurfaceVariant',
-      },
-      info: {
-        bg: 'secondaryContainer/30',
-        borderColor: 'secondary/30',
-        color: 'secondary',
-      },
-      warn: {
-        bg: 'warningContainer/30',
-        borderColor: 'warning/30',
-        color: 'warning',
-      },
-      error: {
-        bg: 'errorContainer/30',
-        borderColor: 'error/30',
-        color: 'error',
-      },
-      unknown: {
-        bg: 'surfaceContainerHighest',
-        borderColor: 'outline/30',
-        color: 'onSurfaceVariant',
-      },
-    },
-  },
-});
-
-export const message = css({
-  color: 'onSurfaceVariant',
-  fontWeight: 'medium',
-  overflowWrap: 'anywhere',
 });
 
 export const actions = css({
@@ -205,22 +144,14 @@ export const actionButton = css({
   borderStyle: 'solid',
   borderColor: 'outlineVariant',
   borderRadius: 'xl',
-  color: 'onSurfaceVariant/90',
+  color: 'onSurface',
   fontSize: '11',
   fontWeight: 'bold',
   letterSpacing: '8',
   lineHeight: '16',
   textTransform: 'uppercase',
   _hover: {
-    bg: 'secondary/5',
+    bg: 'secondary/10',
     borderColor: 'secondary',
-  },
-});
-
-export const dangerActionButton = css({
-  _hover: {
-    bg: 'error/5',
-    borderColor: 'error',
-    color: 'error',
   },
 });

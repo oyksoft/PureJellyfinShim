@@ -121,15 +121,14 @@ export const actions = css({
 
 export const footer = css({
   mt: '5',
+  display: 'flex',
+  justifyContent: 'center',
 });
 
-export const dangerButton = css({
-  borderColor: 'error/55',
-  color: 'error',
-  _hover: {
-    bg: 'error/10',
-    borderColor: 'error',
-  },
+export const trashIcon = css({
+  height: '3_5',
+  width: '3_5',
+  mr: '1',
 });
 
 export const icon3_5 = css({
@@ -140,4 +139,50 @@ export const icon3_5 = css({
 export const icon4_5 = css({
   height: 'lg',
   width: 'lg',
+});
+
+/* Confirm dialog */
+export const backdrop = css({
+  position: 'fixed',
+  inset: '0',
+  bg: '[rgba(0,0,0,0.3)]',
+  zIndex: '100',
+});
+
+export const confirmDialog = css({
+  position: 'fixed',
+  top: '[50%]',
+  left: '[50%]',
+  transform: 'translate3d(-50%, -50%, 0)',
+  zIndex: '[101]',
+  bg: 'surfaceContainerLow',
+  borderRadius: '4xl',
+  borderWidth: '1px',
+  borderStyle: 'solid',
+  borderColor: 'outlineVariant',
+  p: '6',
+  maxWidth: '[28rem]',
+  width: 'full',
+  boxShadow: '2xl',
+});
+
+export const confirmTitle = css({
+  color: 'onSurface',
+  fontSize: '18',
+  fontWeight: 'bold',
+  lineHeight: '24',
+  mb: '3',
+});
+
+export const confirmDesc = css({
+  color: 'onSurfaceVariant',
+  fontSize: '14',
+  lineHeight: '20',
+  mb: '6',
+});
+
+export const confirmActions = css({
+  display: 'flex',
+  gap: '3',
+  justifyContent: 'flex-end',
 });

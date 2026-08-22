@@ -4,6 +4,7 @@ import { TagsInput } from '@ark-ui/solid/tags-input';
 import { cx } from '@styled-system/css';
 import { ArrowDown, ArrowUp, ChevronDown, Globe, Plus, Settings, Trash2 } from 'lucide-solid';
 import { For, Show } from 'solid-js';
+import type { Translations } from '~i18n';
 
 import { Button, FieldControl, FieldTextarea, JellyPilotSelect, SectionCard } from '../ui';
 import type { JellyPilotSelectItem } from '../ui';
@@ -14,6 +15,7 @@ import { getSubtitleLanguageLabel, parseSubtitleLanguageInput } from './subtitle
 import type { OperationsConsoleForm } from './types';
 
 interface PlayerBridgeSettingsCardProps {
+  t: Translations;
   form: OperationsConsoleForm;
   subtitleLanguageSelectItems: JellyPilotSelectItem[];
   onSaveTextSetting: (field: 'deviceName' | 'mpvPath' | 'mpvArgs', value: string) => void;
@@ -26,12 +28,13 @@ interface PlayerBridgeSettingsCardProps {
 }
 
 export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCardProps) {
+  const s = () => props.t.settings;
   const [ui, actions] = useOperationsConsoleStore();
 
   return (
     <SectionCard
       icon={<Settings class={shared.sectionIcon.primary} />}
-      title="Player Bridge settings"
+      title={s().playerBridgeSettings}
       trailing={
         <Show when={ui.playerBridgeSaveStatus}>
           {(status) => (
@@ -46,12 +49,12 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
         <props.form.Field
           name="deviceName"
           validators={{
-            onBlur: ({ value }) => (!value.trim() ? 'Device name is required' : undefined),
+            onBlur: ({ value }) => (!value.trim() ? s().deviceNameRequired : undefined),
           }}
         >
           {(field) => (
             <ArkField.Root class={styles.field} invalid={field().state.meta.errors.length > 0}>
-              <ArkField.Label class={shared.overline}>Playback Target name</ArkField.Label>
+              <ArkField.Label class={shared.overline}>{s().playbackTargetName}</ArkField.Label>
               <ArkField.Input
                 asChild={(fieldProps) => (
                   <FieldControl
@@ -66,7 +69,7 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
                       props.onSaveTextSetting('deviceName', event.currentTarget.value);
                     }}
                     class={styles.fullWidth}
-                    placeholder="JellyPilot"
+                    placeholder="PureJellyfinShim"
                   />
                 )}
               />
@@ -75,9 +78,7 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
                   {field().state.meta.errors[0]}
                 </ArkField.ErrorText>
               </Show>
-              <ArkField.HelperText class={styles.helper}>
-                Name displayed in Jellyfin cast menu.
-              </ArkField.HelperText>
+              <ArkField.HelperText class={styles.helper}>{s().deviceNameHint}</ArkField.HelperText>
             </ArkField.Root>
           )}
         </props.form.Field>
@@ -85,7 +86,7 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
         <props.form.Field name="mpvPath">
           {(field) => (
             <ArkField.Root class={styles.field}>
-              <ArkField.Label class={shared.overline}>MPV executable path</ArkField.Label>
+              <ArkField.Label class={shared.overline}>{s().mpvPath}</ArkField.Label>
               <div class={styles.detectRow}>
                 <ArkField.Input
                   asChild={(fieldProps) => (
@@ -100,7 +101,7 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
                         field().handleBlur();
                         props.onSaveTextSetting('mpvPath', event.currentTarget.value);
                       }}
-                      placeholder="Path to mpv executable"
+                      placeholder={s().mpvPathPlaceholder}
                       class={styles.flexInput}
                     />
                   )}
@@ -109,10 +110,9 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
                   type="button"
                   onClick={props.onDetectMpv}
                   disabled={ui.detectingMpv}
-                  variant="secondary"
-                  class={styles.detectButton}
+                  variant="primary"
                 >
-                  {ui.detectingMpv ? 'Detecting...' : 'Detect MPV'}
+                  {ui.detectingMpv ? s().detecting : s().detectMpv}
                 </Button>
               </div>
             </ArkField.Root>
@@ -129,7 +129,7 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
             <Collapsible.Indicator class={styles.chevronWrap}>
               <ChevronDown class={styles.chevron} />
             </Collapsible.Indicator>
-            <span>Advanced MPV options</span>
+            <span>{s().advancedOptions}</span>
           </Collapsible.Trigger>
 
           <Collapsible.Content class={styles.advancedPanel}>
@@ -137,17 +137,15 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
               <div>
                 <h3 class={styles.subheading}>
                   <span class={styles.subheadingAccent} />
-                  MPV arguments
+                  {s().mpvArguments}
                 </h3>
-                <p class={styles.helper}>
-                  Extra command-line flags passed to the external MPV process.
-                </p>
+                <p class={styles.helper}>{s().mpvArgumentsHint}</p>
               </div>
 
               <props.form.Field name="mpvArgs">
                 {(field) => (
                   <ArkField.Root class={styles.field}>
-                    <ArkField.Label class={shared.overline}>Extra arguments</ArkField.Label>
+                    <ArkField.Label class={shared.overline}>{s().extraArguments}</ArkField.Label>
                     <ArkField.Textarea
                       asChild={(fieldProps) => (
                         <FieldTextarea
@@ -160,7 +158,7 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
                             props.onSaveTextSetting('mpvArgs', event.currentTarget.value);
                           }}
                           rows={4}
-                          placeholder="--fullscreen&#10;--force-window"
+                          placeholder={s().extraArgumentsPlaceholder}
                           class={styles.textarea}
                         />
                       )}
@@ -182,19 +180,18 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
             <div>
               <h3 class={styles.languageTitle}>
                 <Globe class={styles.languageIcon} />
-                Preferred subtitle languages
+                {s().subtitleLanguages}
               </h3>
-              <p class={styles.helper}>Add Jellyfin language codes in fallback priority order.</p>
+              <p class={styles.helper}>{s().subtitleLanguagesHint}</p>
             </div>
             <Show when={ui.selectedSubtitleLanguages.length > 0}>
               <Button
                 type="button"
                 variant="text"
-                size="sm"
                 class={styles.clearButton}
                 onClick={props.onClearSubtitleLanguages}
               >
-                Clear all
+                {s().clearAll}
               </Button>
               <TagsInput.ClearTrigger class={styles.hidden} />
             </Show>
@@ -202,17 +199,17 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
 
           <div class={styles.languageGrid}>
             <JellyPilotSelect
-              label="Predefined languages"
+              label={s().predefinedLanguages}
               items={props.subtitleLanguageSelectItems}
               value={null}
-              placeholder="Select a language…"
+              placeholder={s().selectLanguagePlaceholder}
               onValueChange={(value) => {
                 props.onAddSubtitleLanguageCodes([value]);
               }}
             />
 
             <ArkField.Root class={styles.customField}>
-              <ArkField.Label class={shared.overline}>Custom code</ArkField.Label>
+              <ArkField.Label class={shared.overline}>{s().customCode}</ArkField.Label>
               <div class={styles.addRow}>
                 <ArkField.Input
                   asChild={(fieldProps) => (
@@ -233,34 +230,29 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
                         props.onAddSubtitleLanguages();
                       }}
                       class={cx(styles.flexInput, styles.mono)}
-                      placeholder="e.g. pol, tha"
-                      aria-label="Custom subtitle language code"
+                      placeholder={s().customCodePlaceholder}
+                      aria-label={s().customCode}
                     />
                   )}
                 />
-                <button
+                <Button
                   type="button"
-                  class={styles.addButton}
+                  variant="primary"
                   disabled={parseSubtitleLanguageInput(ui.subtitleLanguageInput).length === 0}
                   onClick={props.onAddSubtitleLanguages}
+                  leadingIcon={<Plus class={styles.icon4_5} />}
                 >
-                  <Plus class={styles.plusIcon} />
-                  <span>Add</span>
-                </button>
+                  {s().add}
+                </Button>
               </div>
             </ArkField.Root>
           </div>
 
           <Show
             when={ui.selectedSubtitleLanguages.length > 0}
-            fallback={
-              <p class={styles.empty}>
-                No preferred subtitle languages selected. JellyPilot will use Jellyfin and media
-                defaults.
-              </p>
-            }
+            fallback={<p class={styles.empty}>{s().subtitleLanguagesEmpty}</p>}
           >
-            <ol class={styles.list} aria-label="Selected preferred subtitle languages">
+            <ol class={styles.list} aria-label={s().subtitleLanguages}>
               <For each={ui.selectedSubtitleLanguages}>
                 {(language, index) => (
                   <TagsInput.Item index={index()} value={language} class={styles.item}>
@@ -273,10 +265,9 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
                       <Button
                         type="button"
                         variant="icon"
-                        size="sm"
                         class={styles.smallIconButton}
                         disabled={index() === 0}
-                        aria-label={`Move ${language} up`}
+                        aria-label={s().moveUp.replace('{language}', language)}
                         onClick={() => props.onMoveSubtitleLanguage(index(), -1)}
                       >
                         <ArrowUp class={styles.icon4} />
@@ -284,10 +275,9 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
                       <Button
                         type="button"
                         variant="icon"
-                        size="sm"
                         class={styles.smallIconButton}
                         disabled={index() === ui.selectedSubtitleLanguages.length - 1}
-                        aria-label={`Move ${language} down`}
+                        aria-label={s().moveDown.replace('{language}', language)}
                         onClick={() => props.onMoveSubtitleLanguage(index(), 1)}
                       >
                         <ArrowDown class={styles.icon4} />
@@ -298,9 +288,8 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
                             {...triggerProps()}
                             type="button"
                             variant="icon"
-                            size="sm"
                             class={cx(styles.smallIconButton, styles.deleteButton)}
-                            aria-label={`Remove ${language}`}
+                            aria-label={s().removeLanguage.replace('{language}', language)}
                             onClick={() => props.onRemoveSubtitleLanguage(language)}
                           >
                             <Trash2 class={styles.icon4} />

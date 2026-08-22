@@ -114,9 +114,55 @@ export const warningIcon = css({
 export const actionRow = css({
   mt: '6',
   display: 'flex',
-  flexWrap: 'wrap',
+  justifyContent: 'center',
   alignItems: 'center',
   gap: '3',
+});
+
+/* Confirm dialog */
+export const backdrop = css({
+  position: 'fixed',
+  inset: '0',
+  bg: '[rgba(0,0,0,0.3)]',
+  zIndex: '100',
+});
+
+export const confirmDialog = css({
+  position: 'fixed',
+  top: '[50%]',
+  left: '[50%]',
+  transform: 'translate3d(-50%, -50%, 0)',
+  zIndex: '[101]',
+  bg: 'surfaceContainerLow',
+  borderRadius: '4xl',
+  borderWidth: '1px',
+  borderStyle: 'solid',
+  borderColor: 'outlineVariant',
+  p: '6',
+  maxWidth: '[28rem]',
+  width: 'full',
+  boxShadow: '2xl',
+});
+
+export const confirmTitle = css({
+  color: 'onSurface',
+  fontSize: '18',
+  fontWeight: 'bold',
+  lineHeight: '24',
+  mb: '3',
+});
+
+export const confirmDesc = css({
+  color: 'onSurfaceVariant',
+  fontSize: '14',
+  lineHeight: '20',
+  mb: '6',
+});
+
+export const confirmActions = css({
+  display: 'flex',
+  gap: '3',
+  justifyContent: 'flex-end',
 });
 
 export const stack4 = css({

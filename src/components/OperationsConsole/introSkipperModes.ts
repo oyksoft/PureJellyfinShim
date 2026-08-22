@@ -1,23 +1,21 @@
+import type { Translations } from '~i18n';
+
 import type { IntroSkipperMode } from '../../bindings';
 
-export const INTRO_SKIPPER_MODES: {
-  mode: IntroSkipperMode;
-  label: string;
-  description: string;
-}[] = [
+export const INTRO_SKIPPER_MODES = (t: Translations) => [
   {
-    description: 'Skip ranges as playback reaches them.',
-    label: 'Automatic',
-    mode: 'automatic',
+    description: t.settings.introSkipAutomaticDesc,
+    label: t.settings.introSkipAutomatic,
+    mode: 'automatic' as IntroSkipperMode,
   },
   {
-    description: 'Show an MPV prompt and wait for the shortcut.',
-    label: 'Manual',
-    mode: 'manual',
+    description: t.settings.introSkipManualDesc,
+    label: t.settings.introSkipManual,
+    mode: 'manual' as IntroSkipperMode,
   },
   {
-    description: 'Do not fetch or apply Intro Skipper ranges.',
-    label: 'Off',
-    mode: 'off',
+    description: t.settings.introSkipOffDesc,
+    label: t.settings.introSkipOff,
+    mode: 'off' as IntroSkipperMode,
   },
 ];

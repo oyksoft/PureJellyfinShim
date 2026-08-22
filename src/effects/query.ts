@@ -1,10 +1,4 @@
-import type {
-  ConnectionState,
-  MediaServerProvider,
-  VideoLibraryKind,
-  VideoLibraryPlayedFilter,
-  VideoLibrarySort,
-} from '@bindings';
+import type { ConnectionState, MediaServerProvider } from '@bindings';
 import { Effect, Exit } from 'effect';
 
 export function runExit<A, E>(effect: Effect.Effect<A, E>): Promise<Exit.Exit<A, E>> {
@@ -64,72 +58,5 @@ export const queryKeys = {
   savedServiceProfiles: ['connection', 'profiles'] as const,
   nowPlayingState: ['nowPlaying', 'state'] as const,
   mpvTracks: (connected: boolean) => ['mpv', 'tracks', connected] as const,
-  imageCacheStatus: ['imageCache', 'status'] as const,
   libraryRoot: ['library'] as const,
-  librarySessionRoot: (sessionKey: LibrarySessionKey) => ['library', sessionKey] as const,
-  libraryShortcuts: (sessionKey: LibrarySessionKey) =>
-    [...queryKeys.librarySessionRoot(sessionKey), 'shortcuts'] as const,
-  librarySearch: (sessionKey: LibrarySessionKey, query: string) =>
-    [...queryKeys.librarySessionRoot(sessionKey), 'search', query] as const,
-  libraryHome: (sessionKey: LibrarySessionKey) =>
-    [...queryKeys.librarySessionRoot(sessionKey), 'home'] as const,
-  libraryBrowseRoot: (sessionKey: LibrarySessionKey) =>
-    [...queryKeys.librarySessionRoot(sessionKey), 'browse'] as const,
-  libraryBrowse: (
-    sessionKey: LibrarySessionKey,
-    collectionType: VideoLibraryKind,
-    libraryId: string,
-    sort: VideoLibrarySort,
-    playedFilter: VideoLibraryPlayedFilter,
-    favoritesOnly: boolean,
-    sortDirection: 'asc' | 'desc',
-  ) =>
-    [
-      ...queryKeys.libraryBrowseRoot(sessionKey),
-      collectionType,
-      libraryId,
-      sort,
-      playedFilter,
-      favoritesOnly,
-      sortDirection,
-    ] as const,
-  libraryBrowsePage: (
-    sessionKey: LibrarySessionKey,
-    collectionType: VideoLibraryKind,
-    libraryId: string,
-    sort: VideoLibrarySort,
-    playedFilter: VideoLibraryPlayedFilter,
-    favoritesOnly: boolean,
-    sortDirection: 'asc' | 'desc',
-    startIndex: number,
-  ) =>
-    [
-      ...queryKeys.libraryBrowse(
-        sessionKey,
-        collectionType,
-        libraryId,
-        sort,
-        playedFilter,
-        favoritesOnly,
-        sortDirection,
-      ),
-      'page',
-      startIndex,
-    ] as const,
-  libraryItemDetail: (sessionKey: LibrarySessionKey, itemId: string) =>
-    [...queryKeys.librarySessionRoot(sessionKey), 'itemDetail', itemId] as const,
-  libraryItemStreams: (sessionKey: LibrarySessionKey, itemId: string) =>
-    [...queryKeys.librarySessionRoot(sessionKey), 'itemStreams', itemId] as const,
-  libraryItemShortcut: (sessionKey: LibrarySessionKey, itemId: string) =>
-    [...queryKeys.librarySessionRoot(sessionKey), 'itemShortcut', itemId] as const,
-  libraryShowDetail: (sessionKey: LibrarySessionKey, seriesId: string) =>
-    [...queryKeys.librarySessionRoot(sessionKey), 'showDetail', seriesId] as const,
-  librarySeasonEpisodes: (sessionKey: LibrarySessionKey, seriesId: string, seasonId: string) =>
-    [...queryKeys.librarySeasonEpisodesRoot(sessionKey, seriesId), seasonId] as const,
-  librarySeasonEpisodesRoot: (sessionKey: LibrarySessionKey, seriesId: string) =>
-    [...queryKeys.librarySessionRoot(sessionKey), 'seasonEpisodes', seriesId] as const,
-  libraryMediaDetail: (sessionKey: LibrarySessionKey, itemType: string, itemId: string) =>
-    [...queryKeys.librarySessionRoot(sessionKey), 'mediaDetail', itemType, itemId] as const,
-  librarySimilarVideo: (sessionKey: LibrarySessionKey, itemId: string) =>
-    [...queryKeys.librarySessionRoot(sessionKey), 'similarVideo', itemId] as const,
 };

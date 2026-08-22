@@ -1,21 +1,24 @@
 [package]
-name = "jellypilot"
+name = "PureJellyfinShim"
 version = "1.5.0"
-description = "JellyPilot - A cast receiver for Jellyfin that controls external MPV"
-authors = ["Hewel"]
+description = "PureJellyfinShim - A cast receiver for Jellyfin that controls external MPV"
+authors = ["oyksoft"]
 license = "MIT"
-repository = "https://github.com/hewel/jellypilot"
+repository = "https://github.com/oyksoft/PureJellyfinShim"
 edition = "2021"
 rust-version = "1.85"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "jellypilot_lib"
+name = "purejellyfinshim_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.6.2", features = [] }
+
+[dev-dependencies]
+specta-typescript = "0.0.12"
 
 [dependencies]
 serde_json = "1.0.149"
@@ -26,9 +29,8 @@ log = "0.4"
 tauri = { version = "2.11.2", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-log = "2.9.0"
 specta = "=2.0.0-rc.25"
-specta-typescript = "0.0.12"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
-tokio = { version = "1.52.3", features = ["full"] }
+tokio = { version = "1.52.3", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 thiserror = "2.0.18"
 parking_lot = "0.12.5"
 async-channel = "2.5.0"
@@ -45,11 +47,20 @@ bytes = "1.11.1"
 fs2 = "0.4.3"
 hls_m3u8 = "0.5.1"
 url = "2.5.8"
-jellyfin_api = { version = "10.11.10", path = "media-server-api/jellyfin", features = ["rustls"] }
-emby_api = { version = "4.9.3", path = "media-server-api/emby", features = ["rustls"] }
+jellyfin_api = { version = "10.11.11", path = "media-server-api/jellyfin", features = ["rustls"] }
+emby_api = { version = "4.9.5", path = "media-server-api/emby", features = ["rustls"] }
 tauri-plugin-wdio = { version = "1.2.0", optional = true }
 tauri-plugin-wdio-webdriver = { version = "1.2.0", optional = true }
-sqlx = { version = "0.8.6", default-features = false, features = ["sqlite", "runtime-tokio", "derive"] }
+tauri-plugin-shell = "2.3.5"
+tauri-plugin-single-instance = "2.2.1"
 
 [features]
 webdriver = ["dep:tauri-plugin-wdio", "dep:tauri-plugin-wdio-webdriver"]
+
+# Release profile optimizations - reduce binary size while keeping startup fast
+[profile.release]
+lto = "thin"        # thin = 比 fat 快很多，体积略大但仍优化
+codegen-units = 16  # 16 个并行单元，充分利用多核
+panic = "abort"
+strip = true
+incremental = false

@@ -43,7 +43,6 @@ const savedProfiles = {
 
 const appConfig = {
   deviceName: 'JellyPilot',
-  imageDiskCacheEnabled: true,
   introSkipperMode: 'automatic',
   keybindIntroSkip: 'g',
   keybindNext: 'Shift+>',

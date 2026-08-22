@@ -31,36 +31,6 @@ export const commands = {
 	mpvIsConnected: () => __TAURI_INVOKE<boolean>("mpv_is_connected"),
 	/**  Get current user-facing Now Playing state. */
 	nowPlayingGetState: () => typedError<NowPlayingState, CommandError>(__TAURI_INVOKE("now_playing_get_state")),
-	/**  Load the Library Browser Video Home dashboard data. */
-	libraryVideoHome: () => typedError<VideoHome, CommandError>(__TAURI_INVOKE("library_video_home")),
-	/**  Load Movies and Shows library shortcuts for Library Browser navigation. */
-	libraryVideoShortcuts: () => typedError<VideoLibraryShortcut[], CommandError>(__TAURI_INVOKE("library_video_shortcuts")),
-	/**  Resolve the Movies or Shows library shortcut containing the given item, if any. */
-	libraryItemShortcut: (itemId: string) => typedError<{
-	id: string,
-	name: string,
-	collectionType: string,
-	itemCount: number | null,
-	artworkImageId: string | null,
-} | null, CommandError>(__TAURI_INVOKE("library_item_shortcut", { itemId })),
-	/**  Load one server-paged Movies or Shows library result page. */
-	libraryBrowseVideo: (request: VideoLibraryPageRequest) => typedError<VideoLibraryPage, CommandError>(__TAURI_INVOKE("library_browse_video", { request })),
-	/**  Search Movies, Shows, and Episodes with server paging. */
-	librarySearchVideo: (request: VideoSearchRequest) => typedError<VideoSearchPage, CommandError>(__TAURI_INVOKE("library_search_video", { request })),
-	/**  Load Movie or Episode details for the Library Browser. */
-	libraryItemDetail: (itemId: string) => typedError<VideoItemDetail, CommandError>(__TAURI_INVOKE("library_item_detail", { itemId })),
-	/**  Load slower audio and subtitle metadata after critical item detail. */
-	libraryItemStreams: (itemId: string) => typedError<VideoItemStreams, CommandError>(__TAURI_INVOKE("library_item_streams", { itemId })),
-	/**  Load Show details with seasons and the Jellyfin next playable episode. */
-	libraryShowDetail: (seriesId: string) => typedError<VideoShowDetail, CommandError>(__TAURI_INVOKE("library_show_detail", { seriesId })),
-	/**  Load Episodes for one Show season. */
-	librarySeasonEpisodes: (request: VideoSeasonEpisodesRequest) => typedError<VideoSeasonEpisodes, CommandError>(__TAURI_INVOKE("library_season_episodes", { request })),
-	/**  Load similar Movie, Series, and Episode recommendations for a Library item. */
-	librarySimilarVideo: (itemId: string) => typedError<VideoLibraryItem[], CommandError>(__TAURI_INVOKE("library_similar_video", { itemId })),
-	/**  Start explicit Library Browser playback through the active Jellyfin session. */
-	libraryPlay: (request: VideoLibraryPlayRequest) => typedError<null, CommandError>(__TAURI_INVOKE("library_play", { request })),
-	/**  Mutate Jellyfin user data for a Library Browser item. */
-	libraryUpdateUserData: (request: VideoUserDataUpdateRequest) => typedError<VideoUserDataUpdate, CommandError>(__TAURI_INVOKE("library_update_user_data", { request })),
 	/**  Connect to a Jellyfin server. */
 	jellyfinConnect: (credentials: Credentials) => typedError<null, CommandError>(__TAURI_INVOKE("jellyfin_connect", { credentials })),
 	/**  Disconnect from Jellyfin server. */
@@ -146,16 +116,8 @@ export const commands = {
 	configDefault: () => __TAURI_INVOKE<AppConfig>("config_default"),
 	/**  Detect MPV path automatically. */
 	configDetectMpv: () => __TAURI_INVOKE<string | null>("config_detect_mpv"),
-	/**  Get state of application local services (such as image proxy). */
-	appLocalServices: () => __TAURI_INVOKE<AppLocalServices>("app_local_services"),
-	/**  Current Library Image cache status for Library settings. */
-	imageCacheStatus: () => typedError<ImageCacheStatus, CommandError>(__TAURI_INVOKE("image_cache_status")),
-	/**
-	 *  Clear the entire Library Image Cache across every saved server, returning
-	 *  the post-clear status. Pre-Clear writers cannot republish across the
-	 *  destructive epoch; in-flight reads are not broken.
-	 */
-	imageCacheClear: () => typedError<ImageCacheStatus, CommandError>(__TAURI_INVOKE("image_cache_clear")),
+	/**  Rebuild the system tray with the current locale. */
+	rebuildTray: () => typedError<null, string>(__TAURI_INVOKE("rebuild_tray")),
 };
 
 /** Events */
@@ -184,19 +146,14 @@ export type AppConfig = {
 	introSkipperMode?: IntroSkipperMode,
 	/**  Ordered subtitle language codes to prefer when Jellyfin does not request a track. */
 	preferredSubtitleLanguages?: string[],
-	/**  Cache Library Browser images on disk for faster repeat browsing. */
-	imageDiskCacheEnabled?: boolean,
 	/**  Keybinding for next episode in MPV. */
 	keybindNext?: string,
 	/**  Keybinding for previous episode in MPV. */
 	keybindPrev?: string,
 	/**  Keybinding for manual Intro Skipper seek in MPV. */
 	keybindIntroSkip?: string,
-};
-
-/**  App local services state reported to frontend. */
-export type AppLocalServices = {
-	imageProxyBase: string | null,
+	/**  UI language setting. */
+	locale?: Locale,
 };
 
 /**  App notification event emitted to frontend. */
@@ -245,25 +202,11 @@ export type Credentials = {
 	password: string,
 };
 
-/**
- *  Point-in-time Library Image cache status reported to the frontend.
- * 
- *  Byte counts and counts use `u32` because Specta forbids `u64` exports and
- *  every value here is far below 4 GiB.
- */
-export type ImageCacheStatus = {
-	/**  Bytes currently committed to disk across every saved server. */
-	committedBytes: number,
-	/**  Number of committed Library Images across every saved server. */
-	entryCount: number,
-	/**  Whether image disk caching is currently enabled. */
-	enabled: boolean,
-	/**  Whether a Clear is currently in progress. */
-	clearing: boolean,
-};
-
 /**  Intro Skipper behavior mode. */
 export type IntroSkipperMode = "automatic" | "manual" | "off";
+
+/**  Supported UI locale. */
+export type Locale = "auto" | "en" | "zh";
 
 /**  Media server provider selected for a connection or saved service profile. */
 export type MediaServerProvider = "jellyfin" | "emby";
@@ -358,215 +301,6 @@ export type SavedSession = {
 	userName: string,
 	serverName: string | null,
 	deviceId: string | null,
-};
-
-/**  Provider-neutral credits and ratings shared by item and show detail views. */
-export type VideoDetailMetadata = {
-	communityRating: number | null,
-	officialRating: string | null,
-	creators: string[],
-	cast: string[],
-};
-
-/**  Library Browser landing data exposed to the frontend. */
-export type VideoHome = {
-	continueWatching: VideoLibraryItem[],
-	nextUp: VideoLibraryItem[],
-	latestMovies: VideoLibraryItem[],
-	latestEpisodes: VideoLibraryItem[],
-};
-
-/**  Playable Movie or Episode detail data exposed to the frontend. */
-export type VideoItemDetail = {
-	id: string,
-	name: string,
-	itemType: string,
-	overview: string | null,
-	productionYear: number | null,
-	runtimeSeconds: number | null,
-	seriesId: string | null,
-	seriesName: string | null,
-	seasonNumber: number | null,
-	episodeNumber: number | null,
-	genres: string[],
-	played: boolean,
-	favorite: boolean,
-	playedPercentage: number | null,
-	resumePositionSeconds: number | null,
-	canResume: boolean,
-	canPlay: boolean,
-	artworkImageId: string | null,
-	backdropImageId: string | null,
-	metadata: VideoDetailMetadata,
-};
-
-/**  Audio and subtitle metadata loaded after the critical item detail. */
-export type VideoItemStreams = {
-	audioStreams: VideoPlaybackStreamOption[],
-	subtitleStreams: VideoPlaybackStreamOption[],
-};
-
-/**  Media card summary for Video Home rows, Movies and Shows browse results, episode rows, and recommendation shelves. */
-export type VideoLibraryItem = {
-	id: string,
-	name: string,
-	itemType: string,
-	productionYear: number | null,
-	runtimeSeconds: number | null,
-	played: boolean,
-	favorite: boolean,
-	artworkImageId: string | null,
-	/**  Episode metadata: season number (1-based), available for Episode items. */
-	seasonNumber: number | null,
-	/**  Episode metadata: episode number within season (1-based), available for Episode items. */
-	episodeNumber: number | null,
-	/**  Episode metadata: parent series id, available for Episode items. */
-	seriesId: string | null,
-	/**  Episode metadata: parent series name, available for Episode items. */
-	seriesName: string | null,
-	/**  Resume position in seconds, populated for episode rows. */
-	resumePositionSeconds: number | null,
-	/**  Percentage watched (0–100), populated for episode rows. */
-	playedPercentage: number | null,
-	/**  Synopsis text for rich detail rows and recommendation cards. */
-	overview: string | null,
-};
-
-/**  Supported video library browse families. */
-export type VideoLibraryKind = "movies" | "tvshows";
-
-/**  Paged Library Browser listing result. */
-export type VideoLibraryPage = {
-	libraryId: string,
-	collectionType: VideoLibraryKind,
-	startIndex: number,
-	limit: number,
-	totalRecordCount: number,
-	hasMore: boolean,
-	items: VideoLibraryItem[],
-};
-
-/**  Paged Library Browser listing request. */
-export type VideoLibraryPageRequest = {
-	libraryId: string,
-	collectionType: VideoLibraryKind,
-	startIndex: number,
-	limit: number,
-	sort: VideoLibrarySort,
-	playedFilter: VideoLibraryPlayedFilter,
-	favoritesOnly: boolean,
-};
-
-/**  Library Browser playback mode selected by the user. */
-export type VideoLibraryPlayMode = "resume" | "start" | "show";
-
-/**  Explicit Library Browser playback launch request. */
-export type VideoLibraryPlayRequest = {
-	itemId: string,
-	mode: VideoLibraryPlayMode,
-	startPositionSeconds: number | null,
-	audioStreamIndex: number | null,
-	subtitleStreamIndex: number | null,
-};
-
-/**  Supported played-state filters for Library Browser results. */
-export type VideoLibraryPlayedFilter = "all" | "played" | "unplayed";
-
-/**  Video library shortcut for drilling into Movies or Shows libraries. */
-export type VideoLibraryShortcut = {
-	id: string,
-	name: string,
-	collectionType: string,
-	itemCount: number | null,
-	artworkImageId: string | null,
-};
-
-/**  Supported Library Browser sort options. */
-export type VideoLibrarySort = "title" | "recentlyAdded" | "releaseDate";
-
-/**  Selectable audio or subtitle stream exposed before Library playback starts. */
-export type VideoPlaybackStreamOption = {
-	index: number,
-	label: string,
-	language: string | null,
-	codec: string | null,
-	isDefault: boolean,
-	isExternal: boolean,
-};
-
-/**  Paged video-only Library search result. */
-export type VideoSearchPage = {
-	query: string,
-	startIndex: number,
-	limit: number,
-	totalRecordCount: number,
-	hasMore: boolean,
-	items: VideoLibraryItem[],
-};
-
-/**  Paged video-only Library search request. */
-export type VideoSearchRequest = {
-	query: string,
-	startIndex: number,
-	limit: number,
-};
-
-/**  Season summary for a Show detail page. */
-export type VideoSeason = {
-	id: string,
-	name: string,
-	seasonNumber: number | null,
-	played: boolean,
-	favorite: boolean,
-	artworkImageId: string | null,
-};
-
-/**  Episode list for a selected season. */
-export type VideoSeasonEpisodes = {
-	seriesId: string,
-	seasonId: string | null,
-	seasonNumber: number | null,
-	episodes: VideoLibraryItem[],
-};
-
-/**  Request for episodes inside a show season. */
-export type VideoSeasonEpisodesRequest = {
-	seriesId: string,
-	seasonId: string | null,
-	seasonNumber: number | null,
-};
-
-/**  Show detail data with seasons and Jellyfin next playable episode. */
-export type VideoShowDetail = {
-	id: string,
-	name: string,
-	overview: string | null,
-	productionYear: number | null,
-	genres: string[],
-	played: boolean,
-	favorite: boolean,
-	canPlay: boolean,
-	artworkImageId: string | null,
-	backdropImageId: string | null,
-	nextEpisode: VideoLibraryItem | null,
-	seasons: VideoSeason[],
-	metadata: VideoDetailMetadata,
-};
-
-/**  User data action supported by Library Browser detail views. */
-export type VideoUserDataAction = "favorite" | "unfavorite" | "markPlayed" | "markUnplayed";
-
-/**  Updated user data returned by Jellyfin after a mutation succeeds. */
-export type VideoUserDataUpdate = {
-	itemId: string,
-	played: boolean,
-	favorite: boolean,
-};
-
-/**  User-scoped Jellyfin user data mutation request. */
-export type VideoUserDataUpdateRequest = {
-	itemId: string,
-	action: VideoUserDataAction,
 };
 
 /* Tauri Specta runtime */

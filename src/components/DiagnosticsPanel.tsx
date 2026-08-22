@@ -1,7 +1,7 @@
 import { Checkbox } from '@ark-ui/solid/checkbox';
-import { cx } from '@styled-system/css';
 import { listen } from '@tauri-apps/api/event';
-import { For, Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+import type { Translations } from '~i18n';
 import * as recipes from '~styles/recipes';
 
 import * as styles from './DiagnosticsPanel.styles';
@@ -12,93 +12,58 @@ interface BackendLogEntry {
   message: string;
 }
 
-type BadgeTone = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'unknown';
-
-interface DiagnosticEntry {
-  levelName: string;
-  levelTone: BadgeTone;
-  message: string;
-  time: string;
-}
-
 interface DiagnosticsPanelProps {
+  t?: Translations;
   compact?: boolean;
 }
 
-const MAX_DIAGNOSTICS = 200;
+const MAX_DIAGNOSTICS = 500;
 
-const LOG_LEVEL: Record<number, { name: string; tone: BadgeTone }> = {
-  1: {
-    name: 'TRACE',
-    tone: 'trace',
-  },
-  2: {
-    name: 'DEBUG',
-    tone: 'debug',
-  },
-  3: {
-    name: 'INFO',
-    tone: 'info',
-  },
-  4: {
-    name: 'WARN',
-    tone: 'warn',
-  },
-  5: {
-    name: 'ERROR',
-    tone: 'error',
-  },
+const LOG_LEVEL: Record<number, string> = {
+  1: 'TRACE',
+  2: 'DEBUG',
+  3: 'INFO ',
+  4: 'WARN ',
+  5: 'ERROR',
 };
 
 const SENSITIVE_QUERY_PARAM =
   /([?&](?:api_key|access_token|token|password|auth|authorization)=)[^&\s]+/gi;
 const BEARER_TOKEN = /(bearer\s+)[^\s]+/gi;
 
-function formatDiagnosticTime(date: Date) {
+function formatTime(date: Date) {
   return new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     hour12: false,
     minute: '2-digit',
     second: '2-digit',
+    fractionalSecondDigits: 3,
   }).format(date);
 }
 
-function sanitizeDiagnosticMessage(message: string) {
+function sanitize(message: string) {
   return message
     .replace(SENSITIVE_QUERY_PARAM, '$1[REDACTED]')
     .replace(BEARER_TOKEN, '$1[REDACTED]');
 }
 
-function toDiagnosticEntry(entry: BackendLogEntry): DiagnosticEntry {
-  const level = LOG_LEVEL[entry.level] ?? {
-    name: 'UNKNOWN',
-    tone: 'unknown' as const,
-  };
-
-  return {
-    levelName: level.name,
-    levelTone: level.tone,
-    message: sanitizeDiagnosticMessage(entry.message),
-    time: formatDiagnosticTime(new Date()),
-  };
-}
-
-function formatDiagnosticsForClipboard(entries: DiagnosticEntry[]) {
-  return entries.map((entry) => `[${entry.time}] ${entry.levelName} ${entry.message}`).join('\n');
-}
-
 export default function DiagnosticsPanel(props: DiagnosticsPanelProps) {
-  const [diagnostics, setDiagnostics] = createSignal<DiagnosticEntry[]>([]);
+  const s = () => props.t?.settings;
+  const [lines, setLines] = createSignal<string[]>([]);
   const [autoScroll, setAutoScroll] = createSignal(true);
   const [copyStatus, setCopyStatus] = createSignal<'idle' | 'copied' | 'failed'>('idle');
-  let containerRef: HTMLDivElement | undefined;
+  let boxRef: HTMLTextAreaElement | undefined;
 
   onMount(() => {
     let disposed = false;
     let cleanup: (() => void) | undefined;
 
     listen<BackendLogEntry>('log://log', (event) => {
-      setDiagnostics((prev) => [...prev, toDiagnosticEntry(event.payload)].slice(-MAX_DIAGNOSTICS));
+      const payload = event.payload;
+      const level = LOG_LEVEL[payload.level] ?? '     ';
+      const time = formatTime(new Date());
+      const msg = sanitize(payload.message);
+      setLines((prev) => [...prev, `${time}  ${level}  ${msg}`].slice(-MAX_DIAGNOSTICS));
     }).then((unlisten) => {
       if (disposed) {
         unlisten();
@@ -114,32 +79,36 @@ export default function DiagnosticsPanel(props: DiagnosticsPanelProps) {
   });
 
   createEffect(() => {
-    if (!props.compact && autoScroll() && containerRef) {
-      diagnostics();
-      containerRef.scrollTop = containerRef.scrollHeight;
+    if (autoScroll() && boxRef) {
+      lines();
+      boxRef.scrollTop = boxRef.scrollHeight;
     }
   });
 
-  const visibleEntries = () => (props.compact ? diagnostics().slice(-5) : diagnostics());
-
   const clearDiagnostics = () => {
-    setDiagnostics([]);
+    setLines([]);
     setCopyStatus('idle');
   };
 
   const copyDiagnostics = async () => {
     try {
-      await navigator.clipboard.writeText(formatDiagnosticsForClipboard(diagnostics()));
+      await navigator.clipboard.writeText(lines().join('\n'));
       setCopyStatus('copied');
     } catch {
       setCopyStatus('failed');
     }
   };
 
+  const logText = () => lines().join('\n');
+
   return (
     <div class={styles.root}>
       <div class={styles.header}>
-        <p class={styles.count}>{diagnostics().length} sanitized runtime events</p>
+        <p class={styles.count}>
+          {lines().length === 0
+            ? (s()?.sanitizedRuntimeEventsNone ?? '暂无已清理的运行时事件')
+            : `${lines().length} ${s()?.sanitizedRuntimeEvents ?? 'sanitized runtime events'}`}
+        </p>
         <Show when={!props.compact}>
           <Checkbox.Root
             checked={autoScroll()}
@@ -149,38 +118,21 @@ export default function DiagnosticsPanel(props: DiagnosticsPanelProps) {
             <Checkbox.Control class={recipes.checkboxBox}>
               <Checkbox.Indicator class={recipes.checkboxIndicator}>✓</Checkbox.Indicator>
             </Checkbox.Control>
-            <Checkbox.Label class={styles.checkboxLabel}>Auto-scroll</Checkbox.Label>
+            <Checkbox.Label class={styles.checkboxLabel}>
+              {s()?.autoScroll ?? 'Auto-scroll'}
+            </Checkbox.Label>
             <Checkbox.HiddenInput />
           </Checkbox.Root>
         </Show>
       </div>
 
-      <div
-        ref={containerRef}
-        class={styles.log({ size: props.compact ? 'compact' : 'expanded' })}
-        role="log"
-      >
-        <Show
-          when={visibleEntries().length > 0}
-          fallback={
-            <p class={styles.empty}>
-              No diagnostics yet. Runtime events from the Rust backend will appear here.
-            </p>
-          }
-        >
-          <For each={visibleEntries()}>
-            {(entry) => (
-              <div class={styles.entry}>
-                <div class={styles.entryInner}>
-                  <span class={styles.time}>{entry.time}</span>
-                  <span class={styles.badge({ tone: entry.levelTone })}>{entry.levelName}</span>
-                  <span class={styles.message}>{entry.message}</span>
-                </div>
-              </div>
-            )}
-          </For>
-        </Show>
-      </div>
+      <textarea
+        ref={boxRef}
+        class={styles.logBox({ size: props.compact ? 'compact' : 'expanded' })}
+        value={logText()}
+        readOnly
+        aria-label={s()?.diagnosticLogOutput ?? 'Diagnostic log output'}
+      />
 
       <div class={styles.actions}>
         <Show when={copyStatus() !== 'idle'}>
@@ -189,27 +141,27 @@ export default function DiagnosticsPanel(props: DiagnosticsPanelProps) {
             aria-live="polite"
             class={styles.status({ tone: copyStatus() === 'copied' ? 'copied' : 'failed' })}
           >
-            {copyStatus() === 'copied' ? 'Copied' : 'Copy failed'}
+            {copyStatus() === 'copied'
+              ? (s()?.copied ?? 'Copied')
+              : (s()?.copyFailed ?? 'Copy failed')}
           </span>
         </Show>
         <Button
           type="button"
           onClick={copyDiagnostics}
-          disabled={diagnostics().length === 0}
-          variant="text"
-          size="sm"
+          disabled={lines().length === 0}
+          variant="secondary"
           class={styles.actionButton}
         >
-          Copy diagnostics
+          {s()?.copyDiagnostics ?? 'Copy diagnostics'}
         </Button>
         <Button
           type="button"
           onClick={clearDiagnostics}
-          variant="text"
-          size="sm"
-          class={cx(styles.actionButton, styles.dangerActionButton)}
+          variant="danger"
+          class={styles.actionButton}
         >
-          Clear
+          {s()?.clearDiagnostics ?? 'Clear'}
         </Button>
       </div>
     </div>

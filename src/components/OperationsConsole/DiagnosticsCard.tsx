@@ -1,32 +1,37 @@
 import { ClipboardList } from 'lucide-solid';
+import type { Translations } from '~i18n';
 
 import DiagnosticsPanel from '../DiagnosticsPanel';
 import { Button, SectionCard } from '../ui';
-import * as rootStyles from './DiagnosticsCard.styles';
 import * as shared from './shared.styles';
 import { useOperationsConsoleStore } from './store';
 
-export default function DiagnosticsCard() {
+interface DiagnosticsCardProps {
+  t: Translations;
+}
+
+export default function DiagnosticsCard(props: DiagnosticsCardProps) {
+  const s = () => props.t.settings;
   const [ui, actions] = useOperationsConsoleStore();
 
   return (
     <SectionCard
       icon={<ClipboardList class={shared.sectionIcon.plain} />}
-      title="Diagnostics"
+      title={s().diagnostics}
       trailing={
         <Button
           type="button"
-          variant="text"
-          class={rootStyles.toggleButton}
+          variant="secondary"
+          size="sm"
           onClick={actions.toggleDiagnostics}
           aria-expanded={ui.diagnosticsExpanded}
-          aria-label="Toggle diagnostics"
+          aria-label={ui.diagnosticsExpanded ? s().collapse : s().expand}
         >
-          {ui.diagnosticsExpanded ? 'Collapse' : 'Expand'}
+          {ui.diagnosticsExpanded ? s().collapse : s().expand}
         </Button>
       }
     >
-      <DiagnosticsPanel compact={!ui.diagnosticsExpanded} />
+      <DiagnosticsPanel t={props.t} compact={!ui.diagnosticsExpanded} />
     </SectionCard>
   );
 }

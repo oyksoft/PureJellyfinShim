@@ -1,6 +1,6 @@
 [package]
 name = "emby_api"
-version = "4.9.3"
+version = "4.9.5"
 authors = ["OpenAPI Generator team and contributors"]
 description = "Explore the Emby Server API"
 # Override this license by providing a License Object in the OpenAPI.

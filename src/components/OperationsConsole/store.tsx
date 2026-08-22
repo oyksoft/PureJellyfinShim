@@ -17,8 +17,6 @@ export interface PlayerBridgeSaveStatus {
 export interface OperationsConsoleState {
   disconnecting: boolean;
   reconnecting: boolean;
-  signingOut: boolean;
-  confirmSignOut: boolean;
   detectingMpv: boolean;
   advancedOpen: boolean;
   diagnosticsExpanded: boolean;
@@ -61,10 +59,6 @@ export interface OperationsConsoleActions {
   beginDisconnect(): void;
   finishDisconnect(): void;
 
-  beginSignOut(): void;
-  finishSignOut(): void;
-  setSignOutDialogOpen(open: boolean): void;
-
   beginMpvDetection(): void;
   finishMpvDetection(): void;
 }
@@ -93,7 +87,6 @@ export function useOperationsConsoleStore(): StoreValue {
 export function getInitialState(): OperationsConsoleState {
   return {
     advancedOpen: false,
-    confirmSignOut: false,
     detectingMpv: false,
     diagnosticsExpanded: false,
     disconnecting: false,
@@ -103,7 +96,6 @@ export function getInitialState(): OperationsConsoleState {
     playerBridgeSaveStatus: null,
     reconnecting: false,
     selectedSubtitleLanguages: [],
-    signingOut: false,
     subtitleLanguageInput: '',
   };
 }
@@ -126,10 +118,6 @@ function createActions(set: SetStoreFunction<OperationsConsoleState>): Operation
 
     beginReconnect() {
       set('reconnecting', true);
-    },
-
-    beginSignOut() {
-      set('signingOut', true);
     },
 
     clearPlayerBridgeStatus() {
@@ -159,11 +147,6 @@ function createActions(set: SetStoreFunction<OperationsConsoleState>): Operation
       set('reconnecting', false);
     },
 
-    finishSignOut() {
-      set('signingOut', false);
-      set('confirmSignOut', false);
-    },
-
     hydrateFromConfig(config) {
       set('selectedSubtitleLanguages', config.preferredSubtitleLanguages ?? []);
       if (config.mpvArgs && config.mpvArgs.length > 0) {
@@ -177,10 +160,6 @@ function createActions(set: SetStoreFunction<OperationsConsoleState>): Operation
 
     setPreferredSubtitleLanguages(languages) {
       set('selectedSubtitleLanguages', languages);
-    },
-
-    setSignOutDialogOpen(open) {
-      set('confirmSignOut', open);
     },
 
     setSubtitleLanguageInput(value) {

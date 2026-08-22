@@ -71,8 +71,8 @@ pub fn is_natural_end(reason: Option<&str>) -> bool {
 
 pub fn client_message_direction(args: &[String]) -> Option<AdjacentDirection> {
   match args.first().map(String::as_str) {
-    Some("jellypilot-next") => Some(AdjacentDirection::Next),
-    Some("jellypilot-prev") => Some(AdjacentDirection::Previous),
+    Some("purejellyfinshim-next") => Some(AdjacentDirection::Next),
+    Some("purejellyfinshim-prev") => Some(AdjacentDirection::Previous),
     _ => None,
   }
 }
@@ -146,11 +146,11 @@ mod tests {
     assert!(is_natural_end(Some("eof")));
     assert!(!is_natural_end(Some("stop")));
     assert_eq!(
-      client_message_direction(&["jellypilot-next".into()]),
+      client_message_direction(&["purejellyfinshim-next".into()]),
       Some(AdjacentDirection::Next)
     );
     assert_eq!(
-      client_message_direction(&["jellypilot-prev".into()]),
+      client_message_direction(&["purejellyfinshim-prev".into()]),
       Some(AdjacentDirection::Previous)
     );
     assert_eq!(client_message_direction(&["other".into()]), None);

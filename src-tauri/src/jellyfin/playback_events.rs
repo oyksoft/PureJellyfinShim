@@ -352,15 +352,15 @@ pub(super) async fn handle_end_file_event(event: &crate::mpv::MpvEvent, ctx: &Pl
 /// Handle MPV client-message event for keyboard shortcuts.
 ///
 /// Users can add to their input.conf:
-///   Shift+> script-message jellypilot-next
-///   Shift+< script-message jellypilot-prev
+///   Shift+> script-message purejellyfinshim-next
+///   Shift+< script-message purejellyfinshim-prev
 pub(super) async fn handle_client_message_event(event: &crate::mpv::MpvEvent, ctx: &PlayContext) {
   let args = match &event.args {
     Some(args) if !args.is_empty() => args,
     _ => return,
   };
 
-  if args[0] == "jellypilot-skip-intro" {
+  if args[0] == "purejellyfinshim-skip-intro" {
     handle_manual_intro_skip(&ctx.state, &ctx.action_tx).await;
     return;
   }

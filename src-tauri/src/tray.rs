@@ -1,4 +1,4 @@
-//! System tray implementation for JellyPilot.
+//! System tray implementation for PureJellyfinShim.
 //!
 //! Provides a tray icon with menu items:
 //! - Play/Pause: Toggle playback
@@ -16,6 +16,10 @@ use tauri::{
 
 use crate::command::{JellyfinState, MpvState};
 use crate::playback_control::{self, AdjacentDirection};
+use crate::tray_i18n::get_tray_labels;
+
+/// Tray icon ID (used for removal/recreation)
+pub const TRAY_ID: &str = "main";
 
 /// Menu item IDs
 const MENU_PLAY_PAUSE: &str = "play_pause";
@@ -37,21 +41,24 @@ const MENU_QUIT: &str = "quit";
 ///
 /// # Tray Click Behavior
 /// - Left-click: Shows and focuses the main window
-pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+pub fn setup_tray(app: &tauri::AppHandle, locale: &str) -> Result<(), Box<dyn std::error::Error>> {
+  let labels = get_tray_labels(locale);
+
   // Create menu items
-  let play_pause_item = MenuItem::with_id(app, MENU_PLAY_PAUSE, "Play/Pause", true, None::<&str>)?;
-  let next_item = MenuItem::with_id(app, MENU_NEXT, "Next", true, None::<&str>)?;
-  let previous_item = MenuItem::with_id(app, MENU_PREVIOUS, "Previous", true, None::<&str>)?;
-  let mute_item = MenuItem::with_id(app, MENU_MUTE, "Mute", true, None::<&str>)?;
-  let separator = PredefinedMenuItem::separator(app)?;
-  let show_item = MenuItem::with_id(
+  let play_pause_item = MenuItem::with_id(
     app,
-    MENU_SHOW,
-    "Show Operations Console",
+    MENU_PLAY_PAUSE,
+    labels["play_pause"],
     true,
     None::<&str>,
   )?;
-  let quit_item = MenuItem::with_id(app, MENU_QUIT, "Quit", true, None::<&str>)?;
+  let next_item = MenuItem::with_id(app, MENU_NEXT, labels["next"], true, None::<&str>)?;
+  let previous_item =
+    MenuItem::with_id(app, MENU_PREVIOUS, labels["previous"], true, None::<&str>)?;
+  let mute_item = MenuItem::with_id(app, MENU_MUTE, labels["mute"], true, None::<&str>)?;
+  let separator = PredefinedMenuItem::separator(app)?;
+  let show_item = MenuItem::with_id(app, MENU_SHOW, labels["show_console"], true, None::<&str>)?;
+  let quit_item = MenuItem::with_id(app, MENU_QUIT, labels["quit"], true, None::<&str>)?;
 
   // Build the menu
   let menu = Menu::with_items(
@@ -68,10 +75,10 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
   )?;
 
   // Create tray icon
-  let _tray = TrayIconBuilder::new()
+  let _tray = TrayIconBuilder::with_id(TRAY_ID)
     .icon(app.default_window_icon().unwrap().clone())
     .menu(&menu)
-    .tooltip("JellyPilot")
+    .tooltip(labels["tooltip"])
     .show_menu_on_left_click(false) // Left-click shows window, right-click shows menu
     .on_menu_event(|app, event| match event.id.as_ref() {
       MENU_PLAY_PAUSE => {
@@ -153,4 +160,15 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     .build(app)?;
 
   Ok(())
+}
+
+/// Removes the existing tray icon and recreates it with the given locale.
+pub fn rebuild_tray(
+  app: &tauri::AppHandle,
+  locale: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+  // Remove existing tray if present
+  let _ = app.remove_tray_by_id(TRAY_ID);
+  // Recreate with new locale
+  setup_tray(app, locale)
 }

@@ -13,7 +13,7 @@ pub enum ProcessError {
 }
 
 /// Get the IPC socket/pipe path for MPV.
-/// Uses PID suffix to prevent collisions when multiple JellyPilot instances run.
+/// Uses PID suffix to prevent collisions when multiple PureJellyfinShim instances run.
 ///
 /// On Linux, respects `XDG_RUNTIME_DIR` for AppImage/Flatpak compatibility
 /// where `/tmp` may be inaccessible inside sandboxes.
@@ -21,18 +21,18 @@ pub fn ipc_path() -> String {
   let pid = std::process::id();
   #[cfg(windows)]
   {
-    format!(r"\\.\pipe\jellypilot-mpv-{}", pid)
+    format!(r"\\.\pipe\purejellyfinshim-mpv-{}", pid)
   }
   #[cfg(not(windows))]
   {
     let base_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
-    format!("{}/jellypilot-mpv-{}.sock", base_dir, pid)
+    format!("{}/purejellyfinshim-mpv-{}.sock", base_dir, pid)
   }
 }
 
-/// Get the path to JellyPilot's custom input.conf for MPV keybindings.
-pub fn jellypilot_input_conf_path() -> Option<PathBuf> {
-  dirs::config_dir().map(|p| p.join("jellypilot").join("input.conf"))
+/// Get the path to PureJellyfinShim's custom input.conf for MPV keybindings.
+pub fn purejellyfinshim_input_conf_path() -> Option<PathBuf> {
+  dirs::config_dir().map(|p| p.join("PureJellyfinShim").join("input.conf"))
 }
 
 fn legacy_input_conf_path() -> Option<PathBuf> {
@@ -59,49 +59,49 @@ fn migrated_legacy_keybindings(input: &str) -> (String, String, String) {
   )
 }
 
-/// Write JellyPilot's input.conf with the specified keybindings.
+/// Write PureJellyfinShim's input.conf with the specified keybindings.
 /// Always overwrites the file with the provided keybindings.
 pub fn write_input_conf(
   keybind_next: &str,
   keybind_prev: &str,
   keybind_intro_skip: &str,
 ) -> Option<PathBuf> {
-  let path = jellypilot_input_conf_path()?;
+  let path = purejellyfinshim_input_conf_path()?;
 
   // Create parent directory if needed
   if let Some(parent) = path.parent() {
     if !parent.exists() {
       if let Err(e) = std::fs::create_dir_all(parent) {
-        log::warn!("Failed to create JellyPilot config directory: {}", e);
+        log::warn!("Failed to create PureJellyfinShim config directory: {}", e);
         return None;
       }
     }
   }
 
   let bindings = format!(
-    r#"# JellyPilot MPV Keybindings
-# These keybindings are used by JellyPilot to control episode navigation.
-# You can customize these bindings in JellyPilot Settings.
+    r#"# PureJellyfinShim MPV Keybindings
+# These keybindings are used by PureJellyfinShim to control episode navigation.
+# You can customize these bindings in PureJellyfinShim Settings.
 
-{} script-message jellypilot-next    # Play next episode
-{} script-message jellypilot-prev    # Play previous episode
-{} script-message jellypilot-skip-intro    # Skip active Intro Skipper segment
+{} script-message purejellyfinshim-next    # Play next episode
+{} script-message purejellyfinshim-prev    # Play previous episode
+{} script-message purejellyfinshim-skip-intro    # Skip active Intro Skipper segment
 "#,
     keybind_next, keybind_prev, keybind_intro_skip
   );
 
   if let Err(e) = std::fs::write(&path, bindings) {
-    log::warn!("Failed to write JellyPilot input.conf: {}", e);
+    log::warn!("Failed to write PureJellyfinShim input.conf: {}", e);
     return None;
   }
-  log::info!("Updated JellyPilot input.conf at {:?}", path);
+  log::info!("Updated PureJellyfinShim input.conf at {:?}", path);
 
   Some(path)
 }
 
-/// Ensure JellyPilot's input.conf exists with default keybindings.
+/// Ensure PureJellyfinShim's input.conf exists with default keybindings.
 fn ensure_input_conf() -> Option<PathBuf> {
-  let path = jellypilot_input_conf_path()?;
+  let path = purejellyfinshim_input_conf_path()?;
 
   // Only create if it doesn't exist (preserve user customizations via config)
   if !path.exists() {
@@ -229,11 +229,11 @@ pub fn spawn_mpv(mpv_path: Option<&PathBuf>, extra_args: &[String]) -> Result<Ch
     .arg("--no-terminal")
     .arg("--osc");
 
-  // Add JellyPilot keybindings via input.conf
+  // Add PureJellyfinShim keybindings via input.conf
   // Using --input-conf appends to (not replaces) the user's input.conf
   if let Some(input_conf) = ensure_input_conf() {
     cmd.arg(format!("--input-conf={}", input_conf.display()));
-    log::info!("Using JellyPilot input.conf: {:?}", input_conf);
+    log::info!("Using PureJellyfinShim input.conf: {:?}", input_conf);
   }
 
   // Add user-specified extra arguments

@@ -3,7 +3,7 @@ import { readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const EMBY_SDK_TAG = '4.9.3.0';
+const EMBY_SDK_TAG = '4.9.5.0';
 const GLOBAL_PROPERTY = 'apiTests=false,modelTests=false,apiDocs=false,modelDocs=false';
 
 interface Provider {
@@ -29,7 +29,7 @@ const providers: Record<'jellyfin' | 'emby', Provider> = {
   },
   emby: {
     specUrl: `https://raw.githubusercontent.com/MediaBrowser/Emby.SDK/${EMBY_SDK_TAG}/Resources/OpenApi/openapi_v3.json`,
-    snapshotPath: 'src-tauri/openapi/emby-openapi-4.9.3.0.json',
+    snapshotPath: 'src-tauri/openapi/emby-openapi-4.9.5.0.json',
     configPath: 'src-tauri/openapi/emby-api-generator.json',
     outputDir: 'src-tauri/media-server-api/emby',
     userAgent: 'jellypilot-emby-openapi-snapshot',
@@ -60,7 +60,7 @@ interface OpenApiParameter {
 }
 
 async function createPatchedEmbyGeneratorSpec(): Promise<string> {
-  const patchedSpecPath = join(tmpdir(), 'jellypilot-emby-openapi-4.9.3.0-generator.json');
+  const patchedSpecPath = join(tmpdir(), 'jellypilot-emby-openapi-4.9.5.0-generator.json');
   const spec = JSON.parse(await readFile(provider.snapshotPath, 'utf8'));
   const imagePath = spec.paths?.['/Users/{Id}/Images/{Type}/{Index}'];
   const indexParameter: OpenApiParameter | undefined = imagePath?.delete?.parameters?.find(

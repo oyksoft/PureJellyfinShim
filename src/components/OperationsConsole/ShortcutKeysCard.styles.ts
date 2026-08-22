@@ -16,3 +16,8 @@ export const description = css({
   fontSize: '12',
   lineHeight: '16',
 });
+
+export const resetIcon = css({
+  height: '4',
+  width: '4',
+});

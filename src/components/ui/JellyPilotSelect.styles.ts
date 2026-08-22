@@ -80,7 +80,7 @@ export const content = css({
   borderRadius: 'lg',
   p: '2',
   boxShadow: '2xl',
-  zIndex: '50',
+  zIndex: '[102]',
   backdropFilter: '[blur(12px)]',
   bg: 'surfaceContainerLowest',
   borderWidth: '1px',

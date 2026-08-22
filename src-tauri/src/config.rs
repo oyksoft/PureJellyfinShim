@@ -12,6 +12,16 @@ pub enum IntroSkipperMode {
   Off,
 }
 
+/// Supported UI locale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Locale {
+  #[default]
+  Auto,
+  En,
+  Zh,
+}
+
 /// Application configuration.
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -44,10 +54,6 @@ pub struct AppConfig {
   #[serde(default)]
   pub preferred_subtitle_languages: Vec<String>,
 
-  /// Cache Library Browser images on disk for faster repeat browsing.
-  #[serde(default = "default_image_disk_cache_enabled")]
-  pub image_disk_cache_enabled: bool,
-
   /// Keybinding for next episode in MPV.
   #[serde(default = "default_keybind_next")]
   pub keybind_next: String,
@@ -59,6 +65,10 @@ pub struct AppConfig {
   /// Keybinding for manual Intro Skipper seek in MPV.
   #[serde(default = "default_keybind_intro_skip")]
   pub keybind_intro_skip: String,
+
+  /// UI language setting.
+  #[serde(default)]
+  pub locale: Locale,
 }
 
 #[derive(Debug, Deserialize)]
@@ -80,14 +90,14 @@ struct AppConfigWire {
   intro_skipper_enabled: Option<bool>,
   #[serde(default)]
   preferred_subtitle_languages: Vec<String>,
-  #[serde(default = "default_image_disk_cache_enabled")]
-  image_disk_cache_enabled: bool,
   #[serde(default = "default_keybind_next")]
   keybind_next: String,
   #[serde(default = "default_keybind_prev")]
   keybind_prev: String,
   #[serde(default = "default_keybind_intro_skip")]
   keybind_intro_skip: String,
+  #[serde(default)]
+  locale: Option<Locale>,
 }
 
 impl<'de> Deserialize<'de> for AppConfig {
@@ -112,16 +122,16 @@ impl<'de> Deserialize<'de> for AppConfig {
       start_minimized: wire.start_minimized,
       intro_skipper_mode,
       preferred_subtitle_languages: wire.preferred_subtitle_languages,
-      image_disk_cache_enabled: wire.image_disk_cache_enabled,
       keybind_next: wire.keybind_next,
       keybind_prev: wire.keybind_prev,
       keybind_intro_skip: wire.keybind_intro_skip,
+      locale: wire.locale.unwrap_or_default(),
     })
   }
 }
 
 fn default_device_name() -> String {
-  "JellyPilot".to_string()
+  "PureJellyfinShim".to_string()
 }
 
 fn default_progress_interval() -> u32 {
@@ -144,10 +154,6 @@ fn default_intro_skipper_mode() -> IntroSkipperMode {
   IntroSkipperMode::Automatic
 }
 
-fn default_image_disk_cache_enabled() -> bool {
-  true
-}
-
 impl Default for AppConfig {
   fn default() -> Self {
     Self {
@@ -158,10 +164,10 @@ impl Default for AppConfig {
       start_minimized: false,
       intro_skipper_mode: default_intro_skipper_mode(),
       preferred_subtitle_languages: Vec::new(),
-      image_disk_cache_enabled: default_image_disk_cache_enabled(),
       keybind_next: default_keybind_next(),
       keybind_prev: default_keybind_prev(),
       keybind_intro_skip: default_keybind_intro_skip(),
+      locale: Locale::Auto,
     }
   }
 }
@@ -211,7 +217,7 @@ mod tests {
   fn older_saved_config_deserializes_with_default_automatic_intro_skipper_mode() {
     let config: AppConfig = serde_json::from_str(
       r#"{
-        "deviceName": "JellyPilot",
+        "deviceName": "PureJellyfinShim",
         "progressInterval": 5,
         "startMinimized": false,
         "keybindNext": "Shift+n",
@@ -222,7 +228,6 @@ mod tests {
 
     assert_eq!(config.intro_skipper_mode, IntroSkipperMode::Automatic);
     assert!(config.preferred_subtitle_languages.is_empty());
-    assert!(config.image_disk_cache_enabled);
   }
 
   #[test]

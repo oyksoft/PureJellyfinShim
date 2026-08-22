@@ -5,7 +5,7 @@ import type { JSX } from 'solid-js';
 import * as styles from './Button.styles';
 
 export interface ButtonProps extends JSX.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'tonal' | 'outlined' | 'text' | 'icon';
+  variant?: 'primary' | 'secondary' | 'tonal' | 'outlined' | 'danger' | 'text' | 'icon';
   /** `row` is only valid with `variant="icon"` (full-width rail row); other variants fall back to `md`. */
   size?: 'sm' | 'md' | 'lg' | 'row';
   leadingIcon?: JSX.Element;

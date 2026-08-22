@@ -3,7 +3,6 @@ import { Select } from '@ark-ui/solid/select';
 import { cx } from '@styled-system/css';
 import { ChevronDown } from 'lucide-solid';
 import { For, createMemo } from 'solid-js';
-import { Portal } from 'solid-js/web';
 
 import * as styles from './JellyPilotSelect.styles';
 
@@ -23,7 +22,6 @@ interface JellyPilotSelectProps<Value extends string = string> {
   placeholder?: string;
   disabled?: boolean;
   size?: JellyPilotSelectSize;
-  portalMount?: HTMLElement;
   class?: string;
 }
 
@@ -33,19 +31,6 @@ export default function JellyPilotSelect<Value extends string>(
   const collection = createMemo(() => createListCollection({ items: props.items }));
   const selectedValue = () => (props.value === null ? [] : [props.value]);
   const isCompact = () => props.size === 'compact';
-  const SelectContent = () => (
-    <Select.Positioner>
-      <Select.Content class={styles.content}>
-        <For each={collection().items}>
-          {(item) => (
-            <Select.Item item={item} class={styles.item}>
-              <Select.ItemText class={styles.itemText}>{item.label}</Select.ItemText>
-            </Select.Item>
-          )}
-        </For>
-      </Select.Content>
-    </Select.Positioner>
-  );
 
   return (
     <Select.Root
@@ -77,9 +62,17 @@ export default function JellyPilotSelect<Value extends string>(
           </Select.Indicator>
         </Select.Trigger>
       </Select.Control>
-      <Portal mount={props.portalMount}>
-        <SelectContent />
-      </Portal>
+      <Select.Positioner>
+        <Select.Content class={styles.content}>
+          <For each={collection().items}>
+            {(item) => (
+              <Select.Item item={item} class={styles.item}>
+                <Select.ItemText class={styles.itemText}>{item.label}</Select.ItemText>
+              </Select.Item>
+            )}
+          </For>
+        </Select.Content>
+      </Select.Positioner>
       <Select.HiddenSelect />
     </Select.Root>
   );

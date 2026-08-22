@@ -1,90 +1,87 @@
-import { Field as ArkField } from '@ark-ui/solid/field';
-import { Keyboard } from 'lucide-solid';
+import { Keyboard, RotateCcw } from 'lucide-solid';
 import { Show } from 'solid-js';
+import type { Translations } from '~i18n';
 
-import { FieldControl, SectionCard } from '../ui';
+import { Button, SectionCard } from '../ui';
 import * as shared from './shared.styles';
+import ShortcutKeyInput from './ShortcutKeyInput';
 import * as styles from './ShortcutKeysCard.styles';
 import type { OperationsConsoleForm } from './types';
 
 interface ShortcutKeysCardProps {
+  t: Translations;
   form: OperationsConsoleForm;
   showIntroSkipKey: boolean;
   onSaveTextSetting: (
     field: 'keybindNext' | 'keybindPrev' | 'keybindIntroSkip',
     value: string,
   ) => void;
+  onResetDefaults: () => void;
 }
 
 export default function ShortcutKeysCard(props: ShortcutKeysCardProps) {
+  const s = () => props.t.settings;
+
   return (
-    <SectionCard icon={<Keyboard class={shared.sectionIcon.secondary} />} title="Shortcut keys">
+    <SectionCard
+      icon={<Keyboard class={shared.sectionIcon.secondary} />}
+      title={s().shortcutKeys}
+      trailing={
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={props.onResetDefaults}
+          leadingIcon={<RotateCcw class={styles.resetIcon} />}
+        >
+          {s().shortcutResetDefaults}
+        </Button>
+      }
+    >
       <div class={shared.stack4}>
         <p class={styles.description}>
-          {props.showIntroSkipKey
-            ? 'MPV input bindings for episode navigation and manual intro skipping.'
-            : 'MPV input bindings for episode navigation.'}
+          {props.showIntroSkipKey ? s().shortcutKeysHint : s().shortcutKeysHintBasic}
         </p>
 
         <props.form.Field
           name="keybindNext"
           validators={{
-            onBlur: ({ value }) => (!value.trim() ? 'Keybinding is required' : undefined),
+            onChange: ({ value }) => (!value.trim() ? s().keybindingRequired : undefined),
           }}
         >
           {(field) => (
-            <ArkField.Root class={styles.field} invalid={field().state.meta.errors.length > 0}>
-              <ArkField.Label class={shared.overline}>Next episode key</ArkField.Label>
-              <ArkField.Input
-                asChild={(fieldProps) => (
-                  <FieldControl
-                    {...fieldProps()}
-                    variant="filled"
-                    name={field().name}
-                    type="text"
-                    value={field().state.value}
-                    onInput={(event) => field().handleChange(event.currentTarget.value)}
-                    onBlur={(event) => {
-                      field().handleBlur();
-                      props.onSaveTextSetting('keybindNext', event.currentTarget.value);
-                    }}
-                    class={styles.input}
-                    placeholder="Shift+>"
-                  />
-                )}
-              />
-            </ArkField.Root>
+            <ShortcutKeyInput
+              name={field().name}
+              label={s().nextEpisodeKey}
+              value={field().state.value}
+              invalid={field().state.meta.errors.length > 0}
+              onCommit={(value) => {
+                field().handleChange(value);
+                field().handleBlur();
+                props.onSaveTextSetting('keybindNext', value);
+              }}
+            />
           )}
         </props.form.Field>
 
         <props.form.Field
           name="keybindPrev"
           validators={{
-            onBlur: ({ value }) => (!value.trim() ? 'Keybinding is required' : undefined),
+            onChange: ({ value }) => (!value.trim() ? s().keybindingRequired : undefined),
           }}
         >
           {(field) => (
-            <ArkField.Root class={styles.field} invalid={field().state.meta.errors.length > 0}>
-              <ArkField.Label class={shared.overline}>Previous episode key</ArkField.Label>
-              <ArkField.Input
-                asChild={(fieldProps) => (
-                  <FieldControl
-                    {...fieldProps()}
-                    variant="filled"
-                    name={field().name}
-                    type="text"
-                    value={field().state.value}
-                    onInput={(event) => field().handleChange(event.currentTarget.value)}
-                    onBlur={(event) => {
-                      field().handleBlur();
-                      props.onSaveTextSetting('keybindPrev', event.currentTarget.value);
-                    }}
-                    class={styles.input}
-                    placeholder="Shift+<"
-                  />
-                )}
-              />
-            </ArkField.Root>
+            <ShortcutKeyInput
+              name={field().name}
+              label={s().prevEpisodeKey}
+              value={field().state.value}
+              invalid={field().state.meta.errors.length > 0}
+              onCommit={(value) => {
+                field().handleChange(value);
+                field().handleBlur();
+                props.onSaveTextSetting('keybindPrev', value);
+              }}
+            />
           )}
         </props.form.Field>
 
@@ -92,31 +89,21 @@ export default function ShortcutKeysCard(props: ShortcutKeysCardProps) {
           <props.form.Field
             name="keybindIntroSkip"
             validators={{
-              onBlur: ({ value }) => (!value.trim() ? 'Keybinding is required' : undefined),
+              onChange: ({ value }) => (!value.trim() ? s().keybindingRequired : undefined),
             }}
           >
             {(field) => (
-              <ArkField.Root class={styles.field} invalid={field().state.meta.errors.length > 0}>
-                <ArkField.Label class={shared.overline}>Intro skip key</ArkField.Label>
-                <ArkField.Input
-                  asChild={(fieldProps) => (
-                    <FieldControl
-                      {...fieldProps()}
-                      variant="filled"
-                      name={field().name}
-                      type="text"
-                      value={field().state.value}
-                      onInput={(event) => field().handleChange(event.currentTarget.value)}
-                      onBlur={(event) => {
-                        field().handleBlur();
-                        props.onSaveTextSetting('keybindIntroSkip', event.currentTarget.value);
-                      }}
-                      class={styles.input}
-                      placeholder="g"
-                    />
-                  )}
-                />
-              </ArkField.Root>
+              <ShortcutKeyInput
+                name={field().name}
+                label={s().introSkipKey}
+                value={field().state.value}
+                invalid={field().state.meta.errors.length > 0}
+                onCommit={(value) => {
+                  field().handleChange(value);
+                  field().handleBlur();
+                  props.onSaveTextSetting('keybindIntroSkip', value);
+                }}
+              />
             )}
           </props.form.Field>
         </Show>
