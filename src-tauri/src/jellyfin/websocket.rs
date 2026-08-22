@@ -354,6 +354,7 @@ impl JellyfinWebSocket {
     match msg.message_type.as_str() {
       "Play" => {
         if let Some(data) = msg.data {
+          log::info!("[RAW] Play message data: {}", data);
           let play_request: PlayRequest = serde_json::from_value(data)?;
           log::info!("Received Play command: {:?}", play_request);
           Ok(Some(JellyfinCommand::Play(play_request)))

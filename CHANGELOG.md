@@ -2,6 +2,19 @@
 
 All notable changes to JellyPilot are documented in this file.
 
+## [1.5.1] - 2026-08-22
+
+### Fixed
+- Jellyfin Web 10.11.11 item-details 页面：投屏到 PureJellyfinShim 时，音轨/字幕/媒体版本选择器全部隐藏，无法在投屏前预先选择。根因是 jellyfin-web 的 `renderTrackSelections` 检查 `SupportedCommands` 是否包含 `PlayMediaSource` —— 缺失则隐藏整个 `.trackSelections` 容器。修复：在 `SUPPORTED_REMOTE_COMMANDS` 中加入 `PlayMediaSource`（以及 `DisplayMessage`/`SendString`/`Select`，让右侧 remote control 面板也能显示）。
+
+## [1.5.0] - 2026-08-19
+
+### Added
+- 完整库浏览体验：resume-first 首页、电影感 hero、侧边栏搜索
+- 重新设计的媒体详情页
+- 本地代理背后基于 origin-encoded SQLite 的 artwork 缓存
+- 磁盘支持的 Emby HLS 代理
+
 ## [1.4.2] - 2026-07-23
 
 ### Added

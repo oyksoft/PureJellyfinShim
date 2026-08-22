@@ -38,7 +38,11 @@ bun install
 bun tauri build
 ```
 
-构建产物：`src-tauri/target/release/bundle/nsis/PureJellyfinShim_1.5.0_x64-setup.exe`
+构建产物：`src-tauri/target/release/bundle/nsis/PureJellyfinShim_1.5.1_x64-setup.exe`
+
+## v1.5.1 更新
+
+- **修复 Jellyfin Web 详情页音轨/字幕选择器**：投屏到 PureJellyfinShim 时，详情页原本应该显示的"音轨/字幕/媒体版本"下拉框全部消失的问题已修复，现在可以像 jellyfin-mpv-shim 一样在投屏前预先选择音轨和字幕。详细技术分析见 [`notice.md`](notice.md)。
 
 ## 技术栈
 
