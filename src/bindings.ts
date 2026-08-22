@@ -134,8 +134,6 @@ export type AdjacentEpisodeUnavailableReason = "noSession" | "noCurrentItem" | "
 export type AppConfig = {
 	/**  Custom MPV executable path (None = auto-detect). */
 	mpvPath?: string | null,
-	/**  Additional MPV command-line arguments. */
-	mpvArgs?: string[],
 	/**  Device name shown in Jellyfin cast menu. */
 	deviceName?: string,
 	/**  Progress reporting interval in seconds. */

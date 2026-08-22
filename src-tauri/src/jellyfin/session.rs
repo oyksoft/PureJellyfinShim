@@ -20,7 +20,7 @@ use super::websocket::{JellyfinCommand, JellyfinWebSocket, JellyfinWebSocketEven
 use crate::command::{AppNotification, NowPlayingChanged, NowPlayingState};
 use crate::config::{AppConfig, IntroSkipperMode};
 use crate::hls_proxy::HlsProxyState;
-use crate::mpv::MpvClient;
+use crate::mpv::{raise_mpv_window, MpvClient};
 use crate::now_playing::{build_now_playing_state, PlaybackContext, TransportSnapshot};
 use tauri_specta::Event;
 
@@ -36,6 +36,9 @@ pub(super) struct PlayContext {
   pub(super) hls: HlsProxyState,
   pub(super) app: Option<AppHandle>,
   pub(super) config: Arc<RwLock<AppConfig>>,
+  /// MPV client — used by `handle_play` to read the OS pid of the running
+  /// MPV process for the `raise_mpv` window-focus call.
+  pub(super) mpv: Arc<MpvClient>,
 }
 
 /// Session manager state.
@@ -56,6 +59,11 @@ pub(super) struct SessionState {
   pub(super) series_preferences: HashMap<String, TrackPreference>,
   /// Notifications captured when no AppHandle is available (request-capture tests).
   pub(super) recorded_notifications: Vec<(String, String)>,
+  /// Queue of item IDs sent in the current Play command.
+  /// Empty when no active queue (e.g. legacy single-item cast).
+  pub(super) current_queue: Vec<String>,
+  /// Index of the currently-playing item within `current_queue`.
+  pub(super) current_queue_index: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,6 +125,8 @@ impl SessionManager {
         current_media_streams: Vec::new(),
         series_preferences,
         recorded_notifications: Vec::new(),
+        current_queue: Vec::new(),
+        current_queue_index: 0,
       })),
       action_tx,
       action_rx: Arc::new(RwLock::new(Some(action_rx))),
@@ -132,6 +142,7 @@ impl SessionManager {
       hls: self.hls_proxy.clone(),
       app: Some(self.app_handle.clone()),
       config: self.config.clone(),
+      mpv: self.mpv.clone(),
     }
   }
 
@@ -258,7 +269,7 @@ impl SessionManager {
 
     // Start the Playback Target MPV event and progress orchestration loop
     playback_events::start_mpv_event_listener(
-      self.mpv.as_ref().clone(),
+      self.mpv.clone(),
       self.client.clone(),
       self.state.clone(),
       self.action_tx.clone(),
@@ -294,6 +305,7 @@ impl SessionManager {
         hls,
         app: Some(app_handle.clone()),
         config,
+        mpv: mpv.clone(),
       };
 
       log::info!("WebSocket command stream consumer started");
@@ -388,17 +400,100 @@ impl SessionManager {
   ) -> Result<(), JellyfinError> {
     log::info!("handle_play called with request: {:?}", request);
 
-    // Get the first item ID
+    // Pick the index to play: prefer StartIndex from the WebSocket payload
+    // (jellyfin-mpv-shim honors it), otherwise 0.
+    let start_index = request.start_index.unwrap_or(0);
+
+    // Get the item to play now (resolve StartIndex against the list).
     let item_id = request
       .item_ids
-      .first()
-      .ok_or(JellyfinError::SessionNotFound)?;
-    log::info!("Playing item_id: {}", item_id);
+      .get(start_index)
+      .ok_or(JellyfinError::SessionNotFound)?
+      .clone();
+    log::info!(
+      "Playing item_id: {} (queue index {}, queue len {})",
+      item_id,
+      start_index,
+      request.item_ids.len()
+    );
+
+    // Persist the queue for sequential navigation. PlayNow replaces the
+    // existing queue only when the request actually carries multiple items
+    // (the typical cast scenario). When called with a single-item PlayNow
+    // from play_next_in_queue / play_prev_in_queue, keep the existing queue
+    // so later NextTrack calls can keep advancing.
+    {
+      let mut s = ctx.state.write();
+      match request.play_command.as_str() {
+        "PlayLast" => {
+          s.current_queue.extend(request.item_ids.iter().cloned());
+          // current_queue_index already points at the playing item.
+        }
+        "PlayNext" => {
+          // Insert immediately after the current index.
+          let insert_at = s
+            .current_queue_index
+            .saturating_add(1)
+            .min(s.current_queue.len());
+          s.current_queue
+            .splice(insert_at..insert_at, request.item_ids.iter().cloned());
+          // current_queue_index stays where it was.
+        }
+        "PlayNow" => {
+          if request.item_ids.len() > 1 {
+            // Replace the queue with the freshly-cast list.
+            s.current_queue = request.item_ids.clone();
+            s.current_queue_index = start_index;
+          } else {
+            // Single-item PlayNow (typically queue navigation): keep the
+            // surrounding queue, just bump the cursor to the matching id.
+            // If the id is unknown or the queue is empty, start a fresh
+            // single-entry queue so end-file still has something to walk.
+            match s.current_queue.iter().position(|id| id == &item_id) {
+              Some(idx) => s.current_queue_index = idx,
+              None if s.current_queue.is_empty() => {
+                s.current_queue.push(item_id.clone());
+                s.current_queue_index = 0;
+              }
+              None => {
+                // id isn't in the queue (e.g. legacy single-item cast
+                // before this fix ran). Treat as a fresh single-item queue.
+                s.current_queue = vec![item_id.clone()];
+                s.current_queue_index = 0;
+              }
+            }
+          }
+        }
+        _ => {
+          // Unknown command — behave like PlayNow.
+          if request.item_ids.len() > 1 {
+            s.current_queue = request.item_ids.clone();
+            s.current_queue_index = start_index;
+          } else if let Some(idx) = s.current_queue.iter().position(|id| id == &item_id) {
+            s.current_queue_index = idx;
+          }
+        }
+      }
+    }
 
     // Fetch media item metadata for title
-    let item = ctx.client.playback().get_item(item_id).await?;
+    let item = ctx.client.playback().get_item(&item_id).await?;
     let title = Self::format_title(&item);
     log::info!("Media title: {}", title);
+
+    // Raise the MPV window for video items only — both on user-initiated
+    // Play and on end-file auto-next (both go through handle_play). Music
+    // playback leaves MPV alone because tracks change every few minutes
+    // and a window pop-up would be obnoxious.
+    //
+    // Unpause happens *after* the new file loads (inside the
+    // MpvAction::Play handler in mpv_action.rs), not here. Doing it here
+    // would briefly unpause an empty MPV decoder between the unpause
+    // call and the loadfile replace, causing a click/pop in the audio
+    // output.
+    if Self::is_video_item(&item) {
+      raise_mpv_window(ctx.mpv.mpv_pid());
+    }
 
     // Get playback info
     let start_time_ticks = if ctx.client.provider() == MediaServerProvider::Emby {
@@ -410,7 +505,7 @@ impl SessionManager {
       .client
       .playback()
       .get_playback_info(
-        item_id,
+        &item_id,
         start_time_ticks,
         request.audio_stream_index,
         request.subtitle_stream_index,
@@ -479,7 +574,7 @@ impl SessionManager {
     let url = ctx
       .client
       .playback()
-      .build_stream_url(item_id, media_source)
+      .build_stream_url(&item_id, media_source)
       .ok_or(JellyfinError::NotConnected)?;
     log::info!("Built stream URL: {}", redact_url(&url));
 
@@ -501,7 +596,7 @@ impl SessionManager {
       match ctx
         .client
         .playback()
-        .get_intro_skipper_ranges(item_id)
+        .get_intro_skipper_ranges(&item_id)
         .await
       {
         Ok(ranges) => {
@@ -614,7 +709,7 @@ impl SessionManager {
         ctx
           .client
           .playback()
-          .build_subtitle_url(item_id, &media_source.id, ext_sub_stream)
+          .build_subtitle_url(&item_id, &media_source.id, ext_sub_stream)
       {
         log::info!(
           "Loading external subtitle: codec={:?}, url={}",
@@ -644,6 +739,18 @@ impl SessionManager {
       }
       _ => item.name.clone(),
     }
+  }
+
+  /// Returns true when the item is a video (movie, episode, video, etc.).
+  /// Used to gate `raise_mpv` so music playback doesn't pop the window every
+  /// track. Item types are Jellyfin / Emby model values; we only treat the
+  /// well-known video kinds as video and let everything else fall through to
+  /// the "no raise" path.
+  fn is_video_item(item: &MediaItem) -> bool {
+    matches!(
+      item.item_type.as_str(),
+      "Movie" | "Episode" | "Video" | "Series"
+    )
   }
 
   /// Handle Playstate command.
@@ -1039,6 +1146,85 @@ impl SessionManager {
     next: bool,
     report_current_stopped: bool,
   ) -> Result<(), String> {
+    // Prefer the in-memory queue (covers music albums, mixed lists, anything
+    // the cast target's PlayRequest sent). Only fall back to the TV-only
+    // /Shows/{id}/Episodes API when no queue is known — this preserves the
+    // original "auto-next-episode" behavior for users who land on a single
+    // episode without an explicit queue.
+    let (target_index, source_label) = {
+      let s = ctx.state.read();
+      let q = &s.current_queue;
+      if !q.is_empty() {
+        let cur = s.current_queue_index.min(q.len().saturating_sub(1));
+        if next {
+          if cur + 1 < q.len() {
+            (cur + 1, "queue")
+          } else {
+            (usize::MAX, "queue-end")
+          }
+        } else if cur > 0 {
+          (cur - 1, "queue")
+        } else {
+          (usize::MAX, "queue-start")
+        }
+      } else {
+        (usize::MAX, "no-queue")
+      }
+    };
+
+    if target_index != usize::MAX {
+      let next_id_opt = {
+        let s = ctx.state.read();
+        s.current_queue.get(target_index).cloned()
+      };
+      if let Some(next_id) = next_id_opt {
+        log::info!(
+          "Playing {} item from {} (index {})",
+          if next { "next" } else { "previous" },
+          source_label,
+          target_index
+        );
+        // Advance the index so subsequent calls find the following item.
+        {
+          let mut s = ctx.state.write();
+          s.current_queue_index = target_index;
+        }
+        if report_current_stopped {
+          Self::report_playback_stopped(&ctx.client, &ctx.state, &ctx.hls).await;
+        }
+        let play_request = PlayRequest {
+          item_ids: vec![next_id],
+          start_index: Some(0),
+          start_position_ticks: None,
+          play_command: "PlayNow".to_string(),
+          media_source_id: None,
+          audio_stream_index: None,
+          subtitle_stream_index: None,
+        };
+        return Self::handle_play(ctx, true, play_request)
+          .await
+          .map_err(|e| {
+            log::error!(
+              "Failed to play {} {} item: {}",
+              source_label,
+              if next { "next" } else { "previous" },
+              e
+            );
+            format!("Failed to play next item: {}", e)
+          });
+      }
+      log::info!(
+        "Queue {} reached (label {})",
+        if next { "end" } else { "start" },
+        source_label
+      );
+      return Err(format!(
+        "No {} item in queue",
+        if next { "next" } else { "previous" }
+      ));
+    }
+
+    // Fallback to the TV-only /Shows/{id}/Episodes lookup.
     let result = if next {
       ctx.client.playback().get_next_episode(current_item).await
     } else {
@@ -1065,6 +1251,7 @@ impl SessionManager {
 
         let play_request = PlayRequest {
           item_ids: vec![adjacent_item.id.clone()],
+          start_index: None,
           start_position_ticks: None,
           play_command: "PlayNow".to_string(),
           media_source_id: None,
@@ -1412,6 +1599,8 @@ mod tests {
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
+      current_queue: Vec::new(),
+      current_queue_index: 0,
     })
   }
 
@@ -1455,6 +1644,8 @@ mod tests {
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
+      current_queue: Vec::new(),
+      current_queue_index: 0,
     })
   }
 
@@ -1493,6 +1684,8 @@ mod tests {
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
+      current_queue: Vec::new(),
+      current_queue_index: 0,
     });
 
     playback_events::report_progress(&client, &state).await;
@@ -1547,6 +1740,8 @@ mod tests {
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
+      current_queue: Vec::new(),
+      current_queue_index: 0,
     });
 
     SessionManager::report_playback_stopped(&client, &state, &HlsProxyState::default()).await;
@@ -1638,6 +1833,8 @@ mod tests {
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
+      current_queue: Vec::new(),
+      current_queue_index: 0,
     });
     let (action_tx, mut action_rx) = mpsc::channel(1);
     let event = crate::mpv::MpvEvent {
@@ -1954,12 +2151,14 @@ mod emby_hls_tests {
         hls: self.hls.clone(),
         app: None,
         config: self.config.clone(),
+        mpv: MpvClient::new(None).into(),
       };
       SessionManager::handle_play(
         &ctx,
         false,
         PlayRequest {
           item_ids: vec![item_id.to_string()],
+          start_index: None,
           start_position_ticks: Some(0),
           play_command: "PlayNow".to_string(),
           media_source_id: None,
@@ -2420,6 +2619,7 @@ mod emby_hls_tests {
       hls: harness.hls.clone(),
       app: None,
       config: harness.config.clone(),
+      mpv: MpvClient::new(None).into(),
     };
     playback_events::handle_end_file_event(&end_event, &end_ctx).await;
     let (url_c, _) = recv_play_action(&mut harness.action_rx, "adjacent episode play action").await;
@@ -2582,6 +2782,8 @@ mod regression_tests {
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
+      current_queue: Vec::new(),
+      current_queue_index: 0,
     });
     let (action_tx, mut action_rx) = mpsc::channel(1);
 
@@ -2713,6 +2915,8 @@ mod regression_tests {
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
+      current_queue: Vec::new(),
+      current_queue_index: 0,
     })
   }
 

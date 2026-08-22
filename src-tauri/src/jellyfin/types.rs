@@ -113,6 +113,8 @@ pub struct WsMessage {
 #[allow(dead_code)] // API response fields - may be used later
 pub struct PlayRequest {
   pub item_ids: Vec<String>,
+  #[serde(default)]
+  pub start_index: Option<usize>,
   pub start_position_ticks: Option<i64>,
   pub play_command: String,
   #[serde(default)]

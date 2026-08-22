@@ -105,7 +105,6 @@ pub fn run() {
         .filter(|s| !s.is_empty())
         .map(PathBuf::from);
       mpv_for_setup.set_mpv_path(mpv_path);
-      mpv_for_setup.set_extra_args(loaded_config.mpv_args.clone());
 
       // Apply loaded config to Jellyfin client
       jellyfin_for_setup.set_device_name(loaded_config.device_name.clone());

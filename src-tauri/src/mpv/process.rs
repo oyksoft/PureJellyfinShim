@@ -228,6 +228,10 @@ pub fn spawn_mpv(mpv_path: Option<&PathBuf>, extra_args: &[String]) -> Result<Ch
     .arg("--keep-open=no")
     .arg("--no-terminal")
     .arg("--osc");
+  // Window title is left at MPV's default ("mpv - <filename>") so the OS
+  // taskbar / window list show the actual file the user is watching.
+  // raise_mpv_window() finds the MPV window by PID, not by title, so we
+  // do not need a custom marker here.
 
   // Add PureJellyfinShim keybindings via input.conf
   // Using --input-conf appends to (not replaces) the user's input.conf

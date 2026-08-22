@@ -18,7 +18,6 @@ export interface OperationsConsoleState {
   disconnecting: boolean;
   reconnecting: boolean;
   detectingMpv: boolean;
-  advancedOpen: boolean;
   diagnosticsExpanded: boolean;
   playerBridgeSaveStatus: PlayerBridgeSaveStatus | null;
   introSkipperDraft: IntroSkipperMode | null;
@@ -37,13 +36,11 @@ export interface OperationsConsoleActions {
     config: Partial<{
       preferredSubtitleLanguages: string[] | null | undefined;
       introSkipperMode: IntroSkipperMode | undefined;
-      mpvArgs: string[] | null | undefined;
     }>,
   ): void;
 
   showPlayerBridgeStatus(status: PlayerBridgeSaveStatus): void;
   clearPlayerBridgeStatus(): void;
-  setAdvancedOpen(open: boolean): void;
   toggleDiagnostics(): void;
 
   beginIntroSkipperSave(mode: IntroSkipperMode): void;
@@ -86,7 +83,6 @@ export function useOperationsConsoleStore(): StoreValue {
 
 export function getInitialState(): OperationsConsoleState {
   return {
-    advancedOpen: false,
     detectingMpv: false,
     diagnosticsExpanded: false,
     disconnecting: false,
@@ -149,13 +145,6 @@ function createActions(set: SetStoreFunction<OperationsConsoleState>): Operation
 
     hydrateFromConfig(config) {
       set('selectedSubtitleLanguages', config.preferredSubtitleLanguages ?? []);
-      if (config.mpvArgs && config.mpvArgs.length > 0) {
-        set('advancedOpen', true);
-      }
-    },
-
-    setAdvancedOpen(open) {
-      set('advancedOpen', open);
     },
 
     setPreferredSubtitleLanguages(languages) {

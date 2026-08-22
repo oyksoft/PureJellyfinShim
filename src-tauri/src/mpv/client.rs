@@ -39,22 +39,22 @@ pub(crate) fn has_mpv_option(configured_args: &[String], option_name: &str) -> b
   })
 }
 
-fn mpv_spawn_args(configured_args: &[String], demuxer_cache_dir: Option<&Path>) -> Vec<String> {
-  let mut args =
-    Vec::with_capacity(configured_args.len() + usize::from(demuxer_cache_dir.is_some()));
-  if let Some(cache_dir) =
-    demuxer_cache_dir.filter(|_| !has_mpv_option(configured_args, "demuxer-cache-dir"))
-  {
+fn mpv_spawn_args(demuxer_cache_dir: Option<&Path>) -> Vec<String> {
+  // Extra MPV args used to be configurable from the UI but the feature was
+  // removed; users set their own options in mpv.conf now. PJS still injects
+  // the demuxer cache dir because that is a per-app config that mpv.conf
+  // does not have a clean equivalent for.
+  let mut args = Vec::with_capacity(usize::from(demuxer_cache_dir.is_some()));
+  if let Some(cache_dir) = demuxer_cache_dir {
     args.push(format!("--demuxer-cache-dir={}", cache_dir.display()));
   }
-  args.extend_from_slice(configured_args);
+  let _ = has_mpv_option; // kept exported for `direct_playback_file_options`
   args
 }
 
 /// High-level MPV client.
 pub struct MpvClient {
   mpv_path: Arc<Mutex<Option<PathBuf>>>,
-  extra_args: Arc<Mutex<Vec<String>>>,
   demuxer_cache_dir: Arc<Mutex<Option<PathBuf>>>,
   process: Arc<Mutex<Option<Child>>>,
   ipc: Arc<Mutex<Option<Arc<MpvIpc>>>>,
@@ -65,7 +65,6 @@ impl MpvClient {
   pub fn new(mpv_path: Option<PathBuf>) -> Self {
     Self {
       mpv_path: Arc::new(Mutex::new(mpv_path)),
-      extra_args: Arc::new(Mutex::new(Vec::new())),
       demuxer_cache_dir: Arc::new(Mutex::new(None)),
       process: Arc::new(Mutex::new(None)),
       ipc: Arc::new(Mutex::new(None)),
@@ -75,11 +74,6 @@ impl MpvClient {
   /// Update MPV path (takes effect on next start).
   pub fn set_mpv_path(&self, path: Option<PathBuf>) {
     *self.mpv_path.lock() = path;
-  }
-
-  /// Update extra MPV arguments (takes effect on next start).
-  pub fn set_extra_args(&self, args: Vec<String>) {
-    *self.extra_args.lock() = args;
   }
 
   /// Set Tauri's application cache directory for MPV's temporary demuxer cache files.
@@ -94,9 +88,8 @@ impl MpvClient {
 
     // Get current config
     let mpv_path = self.mpv_path.lock().clone();
-    let configured_args = self.extra_args.lock().clone();
     let demuxer_cache_dir = self.demuxer_cache_dir.lock().clone();
-    let spawn_args = mpv_spawn_args(&configured_args, demuxer_cache_dir.as_deref());
+    let spawn_args = mpv_spawn_args(demuxer_cache_dir.as_deref());
 
     // Spawn MPV process
     let child = spawn_mpv(mpv_path.as_ref(), &spawn_args)?;
@@ -218,6 +211,13 @@ impl MpvClient {
       has_process
     );
     connected
+  }
+
+  /// Return the OS pid of the running MPV child, or `None` if MPV is not
+  /// started or has been reaped. Used by `raise_mpv` to scope the window
+  /// search to just the MPV process we own (ignoring the whole desktop).
+  pub fn mpv_pid(&self) -> Option<u32> {
+    self.process.lock().as_ref().map(|child| child.id())
   }
 
   /// Get a clone of the IPC connection.
@@ -447,7 +447,6 @@ impl Clone for MpvClient {
   fn clone(&self) -> Self {
     Self {
       mpv_path: self.mpv_path.clone(),
-      extra_args: self.extra_args.clone(),
       demuxer_cache_dir: self.demuxer_cache_dir.clone(),
       process: self.process.clone(),
       ipc: self.ipc.clone(),
@@ -465,25 +464,16 @@ mod tests {
   use super::*;
 
   #[test]
-  fn spawn_args_use_tauri_cache_dir_when_user_has_no_override() {
+  fn spawn_args_use_tauri_cache_dir() {
     assert_eq!(
-      mpv_spawn_args(&["--fullscreen".to_string()], Some(Path::new("app-cache"))),
-      vec![
-        "--demuxer-cache-dir=app-cache".to_string(),
-        "--fullscreen".to_string(),
-      ]
+      mpv_spawn_args(Some(Path::new("app-cache"))),
+      vec!["--demuxer-cache-dir=app-cache".to_string()]
     );
   }
 
   #[test]
-  fn spawn_args_preserve_explicit_user_cache_dir() {
-    assert_eq!(
-      mpv_spawn_args(
-        &["--demuxer-cache-dir=user-cache".to_string()],
-        Some(Path::new("app-cache")),
-      ),
-      vec!["--demuxer-cache-dir=user-cache".to_string()]
-    );
+  fn spawn_args_omit_cache_dir_when_unset() {
+    assert_eq!(mpv_spawn_args(None), Vec::<String>::new());
   }
 
   #[tokio::test]

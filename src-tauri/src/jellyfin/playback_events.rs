@@ -43,7 +43,7 @@ use crate::mpv::MpvClient;
 /// the shared Now Playing owner.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn start_mpv_event_listener(
-  mpv: MpvClient,
+  mpv: Arc<MpvClient>,
   client: Arc<JellyfinClient>,
   state: Arc<RwLock<SessionState>>,
   action_tx: mpsc::Sender<MpvAction>,
@@ -64,6 +64,7 @@ pub(super) fn start_mpv_event_listener(
       hls: hls.clone(),
       app: Some(app_handle.clone()),
       config: config.clone(),
+      mpv: mpv.clone(),
     };
 
     loop {

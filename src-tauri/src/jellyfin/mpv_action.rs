@@ -141,8 +141,13 @@ impl MpvActionExecutor {
         }
 
         let file_options = {
-          let config = self.config.read();
-          direct_playback_file_options(play_method, &config.mpv_args)
+          // No user-configured args anymore — the UI removed the
+          // "extra arguments" field. `direct_playback_file_options` already
+          // supplies the cache options that PJS itself needs; we pass an
+          // empty slice so the de-dup pass treats everything as
+          // "not yet configured by the user" and adds the defaults.
+          let _config = self.config.read();
+          direct_playback_file_options(play_method, &[])
         };
 
         // Load the file with all options (start position, audio/subtitle tracks)
@@ -180,6 +185,16 @@ impl MpvActionExecutor {
           .await
         {
           log::warn!("Failed to set media title: {}", e);
+        }
+
+        // Resume if the user had paused MPV before casting. Doing this
+        // *after* loadfile (not before) is what avoids the audio click:
+        // unpausing an empty decoder briefly routes silence through the
+        // audio device, which some sound cards reproduce as a pop. With the
+        // new file already loaded the decoder has real samples to output the
+        // moment pause clears.
+        if let Err(e) = self.mpv.set_pause(false).await {
+          log::warn!("Failed to resume after load: {}", e);
         }
 
         log::info!("Started playback: {} - {}", title, redact_url(&url));
@@ -342,7 +357,7 @@ mod tests {
     /// `override_response` may return a replacement response payload for a
     /// command; `None` falls back to the default success reply.
     async fn with_peer_behavior(
-      mpv_args: Vec<String>,
+      _mpv_args: Vec<String>,
       override_response: impl Fn(&serde_json::Value) -> Option<serde_json::Value> + Send + 'static,
     ) -> Self {
       let mpv = MpvClient::new(None);
@@ -379,10 +394,7 @@ mod tests {
       let mpv_started = Arc::new(parking_lot::Mutex::new(0_u32));
       let executor = MpvActionExecutor::new(
         mpv,
-        Arc::new(RwLock::new(AppConfig {
-          mpv_args,
-          ..Default::default()
-        })),
+        Arc::new(RwLock::new(AppConfig::default())),
         {
           let mpv_started = Arc::clone(&mpv_started);
           move || *mpv_started.lock() += 1

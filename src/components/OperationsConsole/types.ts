@@ -5,7 +5,6 @@ import type { IntroSkipperMode } from '../../bindings';
 export interface FormDefaultValues {
   deviceName: string;
   mpvPath: string;
-  mpvArgs: string;
   keybindNext: string;
   keybindPrev: string;
   keybindIntroSkip: string;
@@ -25,7 +24,6 @@ function inferFormType() {
       keybindIntroSkip: '',
       keybindNext: '',
       keybindPrev: '',
-      mpvArgs: '',
       mpvPath: '',
     },
   }));

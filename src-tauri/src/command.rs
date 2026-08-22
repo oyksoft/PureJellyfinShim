@@ -1107,7 +1107,6 @@ pub async fn config_set(
     .filter(|s| !s.is_empty())
     .map(PathBuf::from);
   mpv_state.0.set_mpv_path(mpv_path);
-  mpv_state.0.set_extra_args(config.mpv_args.clone());
   log::info!("MPV config updated (applies on next spawn)");
 
   // Apply Jellyfin device name change if connected

@@ -276,6 +276,7 @@ async fn recover_expired_transcode(old_proxy_session_id: &str, ctx: &PlayContext
   };
   let play_request = PlayRequest {
     item_ids: vec![snapshot.item_id.clone()],
+    start_index: None,
     start_position_ticks: Some(snapshot.position_ticks),
     play_command: "PlayNow".to_string(),
     media_source_id: Some(media_source.id.clone()),

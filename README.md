@@ -38,7 +38,13 @@ bun install
 bun tauri build
 ```
 
-构建产物：`src-tauri/target/release/bundle/nsis/PureJellyfinShim_1.5.1_x64-setup.exe`
+构建产物：`src-tauri/target/release/bundle/nsis/PureJellyfinShim_1.5.2_x64-setup.exe`
+
+## v1.5.2 更新
+
+- **音乐 / 视频队列自动播放**：纯播放单个视频/音频时正常，但以前用 Jellyfin Web 投屏包含多个 ItemIds 的音乐专辑或剧集时只会播第一首（其他被忽略），且自动播放下一首的逻辑只对 TV Episode 工作。现在完整接收 `ItemIds` 列表并在端上自己维护播放队列——音乐专辑按顺序播完整张，剧集自动连播下一集。
+- **cast 视频时 MPV 窗口自动弹到前台**：仿 jellyfin-mpv-shim 的 `win_utils.raise_mpv`，PJS 在视频播完之后把 MPV 窗口提到最前面。音乐不弹窗（避免每首歌都打断用户），但暂停时切换会**自动取消暂停**继续播放新内容（视频和音频都一样）。
+- **移除"高级 MPV 选项"设置项**：之前的 UI 输入框有个 bug——设置后会自动保存，导致下次设置页无法展开。直接砍掉这个功能，MPV 额外的参数让用户自己写在 `mpv.conf` 里更稳。
 
 ## v1.5.1 更新
 

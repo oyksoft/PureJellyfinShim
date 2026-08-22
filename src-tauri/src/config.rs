@@ -30,10 +30,6 @@ pub struct AppConfig {
   #[serde(default)]
   pub mpv_path: Option<String>,
 
-  /// Additional MPV command-line arguments.
-  #[serde(default)]
-  pub mpv_args: Vec<String>,
-
   /// Device name shown in Jellyfin cast menu.
   #[serde(default = "default_device_name")]
   pub device_name: String,
@@ -76,8 +72,6 @@ pub struct AppConfig {
 struct AppConfigWire {
   #[serde(default)]
   mpv_path: Option<String>,
-  #[serde(default)]
-  mpv_args: Vec<String>,
   #[serde(default = "default_device_name")]
   device_name: String,
   #[serde(default = "default_progress_interval")]
@@ -116,7 +110,6 @@ impl<'de> Deserialize<'de> for AppConfig {
 
     Ok(Self {
       mpv_path: wire.mpv_path,
-      mpv_args: wire.mpv_args,
       device_name: wire.device_name,
       progress_interval: wire.progress_interval,
       start_minimized: wire.start_minimized,
@@ -158,7 +151,6 @@ impl Default for AppConfig {
   fn default() -> Self {
     Self {
       mpv_path: None,
-      mpv_args: Vec::new(),
       device_name: default_device_name(),
       progress_interval: default_progress_interval(),
       start_minimized: false,

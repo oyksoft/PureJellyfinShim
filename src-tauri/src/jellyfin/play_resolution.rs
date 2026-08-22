@@ -137,6 +137,7 @@ mod tests {
   fn request(audio: Option<i32>, subtitle: Option<i32>) -> PlayRequest {
     PlayRequest {
       item_ids: vec!["item-1".into()],
+      start_index: None,
       start_position_ticks: Some(50_000_000),
       play_command: "PlayNow".into(),
       media_source_id: None,

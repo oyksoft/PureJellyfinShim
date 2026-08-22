@@ -1,12 +1,11 @@
-import { Collapsible } from '@ark-ui/solid/collapsible';
 import { Field as ArkField } from '@ark-ui/solid/field';
 import { TagsInput } from '@ark-ui/solid/tags-input';
 import { cx } from '@styled-system/css';
-import { ArrowDown, ArrowUp, ChevronDown, Globe, Plus, Settings, Trash2 } from 'lucide-solid';
+import { ArrowDown, ArrowUp, Globe, Plus, Settings, Trash2 } from 'lucide-solid';
 import { For, Show } from 'solid-js';
 import type { Translations } from '~i18n';
 
-import { Button, FieldControl, FieldTextarea, JellyPilotSelect, SectionCard } from '../ui';
+import { Button, FieldControl, JellyPilotSelect, SectionCard } from '../ui';
 import type { JellyPilotSelectItem } from '../ui';
 import * as styles from './PlayerBridgeSettingsCard.styles';
 import * as shared from './shared.styles';
@@ -18,7 +17,7 @@ interface PlayerBridgeSettingsCardProps {
   t: Translations;
   form: OperationsConsoleForm;
   subtitleLanguageSelectItems: JellyPilotSelectItem[];
-  onSaveTextSetting: (field: 'deviceName' | 'mpvPath' | 'mpvArgs', value: string) => void;
+  onSaveTextSetting: (field: 'deviceName' | 'mpvPath', value: string) => void;
   onDetectMpv: () => void;
   onAddSubtitleLanguageCodes: (codes: string[]) => void;
   onAddSubtitleLanguages: () => void;
@@ -118,57 +117,6 @@ export default function PlayerBridgeSettingsCard(props: PlayerBridgeSettingsCard
             </ArkField.Root>
           )}
         </props.form.Field>
-
-        <Collapsible.Root
-          open={ui.advancedOpen}
-          onOpenChange={(details) => actions.setAdvancedOpen(details.open)}
-          lazyMount
-          unmountOnExit
-        >
-          <Collapsible.Trigger type="button" class={styles.advancedTrigger}>
-            <Collapsible.Indicator class={styles.chevronWrap}>
-              <ChevronDown class={styles.chevron} />
-            </Collapsible.Indicator>
-            <span>{s().advancedOptions}</span>
-          </Collapsible.Trigger>
-
-          <Collapsible.Content class={styles.advancedPanel}>
-            <section class={shared.stack4}>
-              <div>
-                <h3 class={styles.subheading}>
-                  <span class={styles.subheadingAccent} />
-                  {s().mpvArguments}
-                </h3>
-                <p class={styles.helper}>{s().mpvArgumentsHint}</p>
-              </div>
-
-              <props.form.Field name="mpvArgs">
-                {(field) => (
-                  <ArkField.Root class={styles.field}>
-                    <ArkField.Label class={shared.overline}>{s().extraArguments}</ArkField.Label>
-                    <ArkField.Textarea
-                      asChild={(fieldProps) => (
-                        <FieldTextarea
-                          {...fieldProps()}
-                          variant="filled"
-                          value={field().state.value}
-                          onInput={(event) => field().handleChange(event.currentTarget.value)}
-                          onBlur={(event) => {
-                            field().handleBlur();
-                            props.onSaveTextSetting('mpvArgs', event.currentTarget.value);
-                          }}
-                          rows={4}
-                          placeholder={s().extraArgumentsPlaceholder}
-                          class={styles.textarea}
-                        />
-                      )}
-                    />
-                  </ArkField.Root>
-                )}
-              </props.form.Field>
-            </section>
-          </Collapsible.Content>
-        </Collapsible.Root>
 
         <TagsInput.Root
           value={ui.selectedSubtitleLanguages}

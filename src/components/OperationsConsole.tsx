@@ -225,7 +225,6 @@ export default function OperationsConsole() {
       keybindIntroSkip: 'g',
       keybindNext: 'Shift+>',
       keybindPrev: 'Shift+<',
-      mpvArgs: '',
       mpvPath: '',
     },
   }));
@@ -236,13 +235,11 @@ export default function OperationsConsole() {
       lastSavedConfig = cfg;
       form.setFieldValue('deviceName', cfg.deviceName ?? 'PureJellyfinShim');
       form.setFieldValue('mpvPath', cfg.mpvPath ?? '');
-      form.setFieldValue('mpvArgs', (cfg.mpvArgs ?? []).join('\n'));
       form.setFieldValue('keybindNext', cfg.keybindNext ?? 'Shift+>');
       form.setFieldValue('keybindPrev', cfg.keybindPrev ?? 'Shift+<');
       form.setFieldValue('keybindIntroSkip', cfg.keybindIntroSkip ?? 'g');
       actions.hydrateFromConfig({
         introSkipperMode: cfg.introSkipperMode ?? 'automatic',
-        mpvArgs: cfg.mpvArgs,
         preferredSubtitleLanguages: normalizePreferredSubtitleLanguages(
           cfg.preferredSubtitleLanguages,
         ),
@@ -274,11 +271,8 @@ export default function OperationsConsole() {
     }
   };
 
-  const parseMpvArgs = (value: string) =>
-    value
-      .split('\n')
-      .map((arg) => arg.trim())
-      .filter((arg) => arg.length > 0);
+  // parseMpvArgs was removed alongside the advanced-options UI; users now
+  // set MPV flags in mpv.conf.
 
   const buildConfigSnapshot = (overrides: Partial<AppConfig>) => {
     const saved = pendingSave?.config ?? latestConfigSnapshot ?? lastSavedConfig ?? config();
@@ -342,13 +336,7 @@ export default function OperationsConsole() {
   };
 
   const saveTextSetting = (
-    field:
-      | 'deviceName'
-      | 'mpvPath'
-      | 'mpvArgs'
-      | 'keybindNext'
-      | 'keybindPrev'
-      | 'keybindIntroSkip',
+    field: 'deviceName' | 'mpvPath' | 'keybindNext' | 'keybindPrev' | 'keybindIntroSkip',
     value: string,
   ) => {
     const saved = lastSavedConfig ?? config();
@@ -371,21 +359,11 @@ export default function OperationsConsole() {
     }
 
     const override =
-      field === 'mpvArgs'
-        ? { mpvArgs: parseMpvArgs(value) }
-        : field === 'mpvPath'
-          ? { mpvPath: value.trim().length > 0 ? value : null }
-          : { [field]: value };
+      field === 'mpvPath'
+        ? { mpvPath: value.trim().length > 0 ? value : null }
+        : { [field]: value };
 
-    if (field === 'mpvArgs') {
-      const nextArgs = override.mpvArgs ?? [];
-      if (
-        nextArgs.length === (desired.mpvArgs?.length ?? 0) &&
-        nextArgs.every((arg, index) => arg === desired.mpvArgs?.[index])
-      ) {
-        return;
-      }
-    } else if (field === 'mpvPath') {
+    if (field === 'mpvPath') {
       if (override.mpvPath === desired.mpvPath) {
         return;
       }
@@ -745,7 +723,7 @@ export default function OperationsConsole() {
                 form={form}
                 subtitleLanguageSelectItems={subtitleLanguageSelectItems}
                 onSaveTextSetting={(field, value) => {
-                  if (field === 'deviceName' || field === 'mpvPath' || field === 'mpvArgs') {
+                  if (field === 'deviceName' || field === 'mpvPath') {
                     saveTextSetting(field, value);
                   }
                 }}

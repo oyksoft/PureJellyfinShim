@@ -2,6 +2,16 @@
 
 All notable changes to JellyPilot are documented in this file.
 
+## [1.5.2] - 2026-08-22
+
+### Added
+- **多 ItemIds 队列播放**：仿 jellyfin-mpv-shim 的 `Media` 类，在端上自己维护 `current_queue` + `index`。Jellyfin Web 投屏包含多个 ItemIds 的音乐专辑或视频时按顺序播完整列；MPV 端上每次只播一首，end-file 后从队列取下一首重新走 `handle_play` 流程。TV 剧集自动连播仍然保留作为 fallback。
+- **视频 cast 自动 raise MPV 窗口**：仿 jMS `win_utils.raise_mpv`，通过 PID 找 MPV 主窗口，依次 `AllowSetForegroundWindow` → `SetForegroundWindow` → `ShowWindow` minimize/restore → `BringWindowToTop` 兜底。视频 cast 时自动弹窗；音乐不弹窗（避免切歌打断）。
+- **手动暂停后 cast 继续播放**：`MpvAction::Play` 在 `loadfile` 完成后才发 `set_property pause no`，避免在空 decoder 上 unpause 引发 audio click。
+
+### Removed
+- **高级 MPV 选项** UI 和后端配置。之前的文本输入框有 bug（设置后自动折叠且下次不可展开），且对绝大多数用户没用。额外的 MPV 参数请在 `mpv.conf` 里配置。
+
 ## [1.5.1] - 2026-08-22
 
 ### Fixed

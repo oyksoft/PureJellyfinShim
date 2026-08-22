@@ -5,11 +5,13 @@
 //! - `ipc.rs` - Async IPC connection (Named Pipes on Windows, Unix Sockets on Linux/macOS)
 //! - `protocol.rs` - JSON command/response types and serialization
 //! - `client.rs` - High-level MPV client with command methods
+//! - `window.rs` - Window management (raise MPV to foreground)
 
 mod client;
 mod ipc;
 mod process;
 mod protocol;
+pub mod window;
 
 pub(crate) use client::has_mpv_option;
 pub use client::MpvClient;
@@ -17,3 +19,4 @@ pub use client::MpvClient;
 pub(crate) use ipc::MpvIpc;
 pub use process::{find_mpv, write_input_conf};
 pub use protocol::{MpvEvent, PropertyValue};
+pub use window::raise_mpv_window;
