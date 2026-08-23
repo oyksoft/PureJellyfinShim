@@ -2,6 +2,23 @@
 
 All notable changes to JellyPilot are documented in this file.
 
+## [1.5.3] - 2026-08-24
+
+### Fixed
+- **音量调整路径全覆盖**：之前只有 PJS UI 的 `mpv_set_volume` Tauri 命令会更新内存中的 `config.volume` 和 MPV 种子音量 `initial_volume`。web 端的 `GeneralCommand::SetVolume` 和 MPV 自身（键盘/OSD/外部客户端）触发的 `property-change` 事件完全没碰这两个值，所以走这两条路径调音量的人，音量永远不会被 PJS 记住，关闭 PJS 后写盘的也是旧值（典型症状：用户从 87 调到 60 后关闭再开又是 87）。现在 web 端 SetVolume 处理函数和事件监听器 `update_state_from_property` 收到 `volume` 变化时，都会同步三处：`session.volume`（上报 Jellyfin）、`config.volume`（退出时写盘）、`MpvClient::initial_volume`（MPV 冷启动时应用）。
+- **`mpv_set_volume` 写入顺序修复**：之前 `state.set_volume(MPV).await` 先执行，失败就 `?` 返回，导致后面的 `config.volume = volume` 和 `set_initial_volume` 被全部跳过。MPV 关闭或 IPC 瞬时错误时音量会被静默丢弃，`config.volume` 卡在启动加载时的旧值。三处更新无条件放在最前面，MPV 推送改成 best-effort（失败仅记录 warning）。
+- **MPV 冷启动时种子音量的可靠应用**：`MpvClient::start()` 之前只发一次 `set_property volume`，MPV 刚启动时 IPC server 可能还没完全 ready，第一次命令被丢弃，MPV 保持 mpv.conf 的默认音量。修复后增加三道保险：记 `seed_volume` 日志、失败 150ms 后重试一次、发完读回实际音量验证（差距 >0.5 再补一次）。
+- **删除 `on_after_play` hook 覆盖 `initial_volume` 的副作用**：原 hook 在播放后读 MPV 音量回写到 `initial_volume`，但 `tokio::spawn` 异步执行和 `set_property volume` 命令生效之间存在时序竞争，会读到中间状态覆盖用户的选择。改成 no-op，`initial_volume` 只在用户调音量时设置，干净无污染。
+- **退出 PJS 时音量写盘错误日志化**：`lib.rs` 的退出处理器之前用 `let _ = store.save()` 吞掉了错误，现在区分打开 store 失败和 save 失败，分别记 error 并提示 "volume NOT persisted!"。
+
+### Changed
+- **MPV IPC 事件通道容量从 100 扩到 1000**：MPV 的 `time-pos` 事件约 60Hz，原 100 的容量会频繁触发 "Event channel full, dropping event"，导致音量/进度/暂停事件被丢弃。
+
+### Maintenance
+- 删除未使用的 `MpvClient::disconnect()` 方法（`is_connected()` 已经做了同样的清理）。
+- `MpvClient::set_volume` 失败时记 error 而不是吞错。
+- 新增 `SessionState::set_playback_volume` 让 web 路径也能同步 session.volume。
+
 ## [1.5.2] - 2026-08-22
 
 ### Added
