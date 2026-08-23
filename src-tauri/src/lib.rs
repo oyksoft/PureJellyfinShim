@@ -1,3 +1,5 @@
+#![allow(linker_messages)]
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -105,6 +107,12 @@ pub fn run() {
         .filter(|s| !s.is_empty())
         .map(PathBuf::from);
       mpv_for_setup.set_mpv_path(mpv_path);
+      // Seed the next MPV start with the user's last-set volume so a fresh
+      // mpv.exe process does not snap back to the mpv.conf default. This
+      // runs once at PJS startup; `on_mpv_disconnect` updates the seed
+      // after the user changes volume mid-session, so this read is the
+      // starting point for the first play after a PJS restart.
+      mpv_for_setup.set_initial_volume(Some(loaded_config.volume));
 
       // Apply loaded config to Jellyfin client
       jellyfin_for_setup.set_device_name(loaded_config.device_name.clone());
@@ -166,6 +174,48 @@ pub fn run() {
         let _ = window.hide();
       }
     })
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application")
+    .run(move |app_handle, event| {
+      // Persist the runtime config (in particular `config.volume`) when
+      // PJS is about to exit. The store is only flushed at app shutdown
+      // so per-track-switch MPV restarts never hit the disk.
+      if matches!(
+        event,
+        tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+      ) {
+        // Kill the MPV process PJS owns so it does not linger after exit.
+        let mpv = app_handle.state::<MpvState>().0.clone();
+        mpv.kill_process();
+
+        use tauri_plugin_store::StoreExt;
+        let snapshot = config.read().clone();
+        log::info!(
+          "flush_config_on_exit: snapshot.volume={} (writing to disk now)",
+          snapshot.volume
+        );
+        match app_handle.store(crate::command::CONFIG_STORE_FILE) {
+          Ok(store) => {
+            store.set(
+              crate::command::CONFIG_STORE_KEY.to_string(),
+              serde_json::to_value(&snapshot).unwrap_or(serde_json::Value::Null),
+            );
+            match store.save() {
+              Ok(_) => log::info!(
+                "flush_config_on_exit: persisted config (volume={})",
+                snapshot.volume
+              ),
+              Err(e) => log::error!(
+                "flush_config_on_exit: store.save() failed: {} (volume NOT persisted!)",
+                e
+              ),
+            }
+          }
+          Err(e) => log::error!(
+            "flush_config_on_exit: failed to open config store: {} (volume NOT persisted!)",
+            e
+          ),
+        }
+      }
+    });
 }

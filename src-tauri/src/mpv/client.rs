@@ -58,6 +58,11 @@ pub struct MpvClient {
   demuxer_cache_dir: Arc<Mutex<Option<PathBuf>>>,
   process: Arc<Mutex<Option<Child>>>,
   ipc: Arc<Mutex<Option<Arc<MpvIpc>>>>,
+  /// Volume to apply after MPV spawns (next start). `None` means "use MPV's
+  /// own default" (whatever mpv.conf / `--volume=` says). When MPV exits and
+  /// is later respawned, this seed is reused so the user's last set volume
+  /// sticks across restarts.
+  initial_volume: Arc<Mutex<Option<f64>>>,
 }
 
 impl MpvClient {
@@ -68,6 +73,7 @@ impl MpvClient {
       demuxer_cache_dir: Arc::new(Mutex::new(None)),
       process: Arc::new(Mutex::new(None)),
       ipc: Arc::new(Mutex::new(None)),
+      initial_volume: Arc::new(Mutex::new(None)),
     }
   }
 
@@ -79,6 +85,14 @@ impl MpvClient {
   /// Set Tauri's application cache directory for MPV's temporary demuxer cache files.
   pub fn set_demuxer_cache_dir(&self, path: PathBuf) {
     *self.demuxer_cache_dir.lock() = Some(path);
+  }
+
+  /// Remember a volume (0-100) to apply on the next MPV start. The value is
+  /// held in the client so that an MPV restart (e.g. after a Play command
+  /// that replaces the process) picks up the user's last set volume
+  /// instead of the mpv.conf default. Pass `None` to clear.
+  pub fn set_initial_volume(&self, volume: Option<f64>) {
+    *self.initial_volume.lock() = volume;
   }
 
   /// Start MPV and connect to IPC.
@@ -108,12 +122,101 @@ impl MpvClient {
       *ipc = Some(Arc::new(ipc_conn));
     }
 
+    // Apply the seed volume (if any) so MPV does not come up at the
+    // mpv.conf default on cold start. MPV's IPC accepts commands as soon
+    // as the socket is up but property setters can race with the IPC
+    // server coming fully online — so retry once after a short delay and
+    // verify by reading the volume back. Without the verify, MPV can
+    // silently stay at its mpv.conf default (commonly `volume=87`) and
+    // the user sees the old volume despite our seed being correct.
+    let seed_volume = *self.initial_volume.lock();
+    log::info!("start(): seed_volume = {:?}", seed_volume);
+    if let Some(vol) = seed_volume {
+      if (0.0..=100.0).contains(&vol) {
+        let cmd = MpvCommand::set_property_string("volume", &vol.to_string());
+        let mut last_err: Option<MpvError> = None;
+        for attempt in 0..2 {
+          match self.send(cmd.clone()).await {
+            Ok(_) => {
+              log::info!(
+                "Applied initial volume {} to MPV (attempt {})",
+                vol,
+                attempt
+              );
+              last_err = None;
+              break;
+            }
+            Err(e) => {
+              log::warn!(
+                "Failed to apply initial volume {} to MPV (attempt {}): {}",
+                vol,
+                attempt,
+                e
+              );
+              last_err = Some(e);
+              tokio::time::sleep(Duration::from_millis(150)).await;
+            }
+          }
+        }
+        if last_err.is_some() {
+          log::error!(
+            "start(): giving up on initial volume {}; MPV will stay at its mpv.conf default",
+            vol
+          );
+        }
+        // Verify: read back the actual MPV volume. If MPV ignored the
+        // set (e.g. timing race, or the command landed before MPV's IPC
+        // server was ready), try once more.
+        match self.get_volume().await {
+          Ok(actual) if (actual - vol).abs() > 0.5 => {
+            log::warn!(
+              "start(): MPV volume is {} after seed; retrying with {}",
+              actual,
+              vol
+            );
+            if let Err(e) = self
+              .send(MpvCommand::set_property_string("volume", &vol.to_string()))
+              .await
+            {
+              log::error!("start(): retry of seed volume also failed: {}", e);
+            } else {
+              log::info!("start(): retry succeeded");
+            }
+          }
+          Ok(actual) => log::info!("start(): verified MPV volume = {}", actual),
+          Err(e) => log::warn!("start(): could not verify MPV volume: {}", e),
+        }
+      }
+    }
+
     log::info!("MPV client connected");
     Ok(())
   }
 
   /// Stop MPV and disconnect.
   /// This is async to avoid blocking on process kill/wait.
+  /// Synchronously kill the owned MPV child process (best-effort).
+  ///
+  /// Used during app shutdown so PJS does not leave an orphaned MPV
+  /// behind. This is deliberately synchronous: by the time the
+  /// `Exit`/`ExitRequested` event fires the Tauri async runtime may
+  /// already be tearing down, so we must not `await` here. We only
+  /// `kill()` the child; reaping the process is the OS's job once PJS
+  /// itself exits. Safe to call when MPV was never started or has
+  /// already exited — it is a no-op in those cases.
+  pub fn kill_process(&self) {
+    let child = self.process.lock().take();
+    if let Some(mut child) = child {
+      let pid = child.id();
+      match child.kill() {
+        Ok(_) => log::info!("Killed MPV process on shutdown (pid: {:?})", pid),
+        Err(e) => log::warn!("Failed to kill MPV process on shutdown: {}", e),
+      }
+    } else {
+      log::debug!("No MPV process to kill on shutdown");
+    }
+  }
+
   pub async fn stop(&self) {
     log::info!("stop() called - closing IPC connection");
     // Close IPC first
@@ -460,6 +563,7 @@ impl Clone for MpvClient {
       demuxer_cache_dir: self.demuxer_cache_dir.clone(),
       process: self.process.clone(),
       ipc: self.ipc.clone(),
+      initial_volume: self.initial_volume.clone(),
     }
   }
 }

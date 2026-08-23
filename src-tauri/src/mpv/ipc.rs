@@ -120,7 +120,7 @@ impl MpvIpc {
 
     let closed = Arc::new(AtomicBool::new(false));
 
-    let (event_tx, event_rx) = async_channel::bounded(100); // Bounded to prevent memory bloat
+    let (event_tx, event_rx) = async_channel::bounded(1000); // Bounded to prevent memory bloat, but large enough to absorb MPV's bursty event stream (especially time-pos at ~60Hz) without dropping.
     let (write_tx, write_rx) = async_channel::bounded::<WriteMessage>(100); // Bounded to prevent OOM
 
     // Spawn reader task

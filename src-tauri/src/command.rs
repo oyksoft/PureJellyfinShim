@@ -4,7 +4,7 @@ use specta::specta;
 #[cfg(debug_assertions)]
 use specta_typescript::Typescript;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{Manager, State};
 use tauri_specta::{collect_commands, collect_events, Builder, Event};
 
 use crate::auth_profiles::{
@@ -430,6 +430,7 @@ pub async fn mpv_set_volume(
   app: tauri::AppHandle,
   state: State<'_, MpvState>,
   jellyfin_state: State<'_, JellyfinState>,
+  config_state: State<'_, ConfigState>,
   volume: f64,
 ) -> Result<(), CommandError> {
   if !(0.0..=100.0).contains(&volume) {
@@ -437,11 +438,35 @@ pub async fn mpv_set_volume(
       "Volume must be between 0 and 100",
     ));
   }
-  state.0.set_volume(volume).await.map_err(internal_err)?;
+  // IMPORTANT: mirror the new volume into the live AppConfig and the MPV
+  // seed *before* pushing it to the MPV process. If MPV is closed or the
+  // IPC momentarily errors, `set_volume` below would propagate the error
+  // and short-circuit the function — leaving `config.volume` stuck at
+  // whatever it was loaded with at startup and the next MPV cold start
+  // would come back at the wrong level. The whole point of this command
+  // is to remember the user's choice; do that unconditionally.
+  config_state.0.write().volume = volume;
+  // Remember the volume for the next MPV cold start (e.g. after a Play
+  // command respawns the process) so MPV comes up at the same level
+  // instead of jumping back to the mpv.conf default of 100.
+  state.0.set_initial_volume(Some(volume));
   if let Some(session) = jellyfin_state.session.read().clone() {
     session.seed_transport(|transport| {
       transport.apply_property("volume", &serde_json::json!(volume));
     });
+    // Mirror the new volume into the active PlaybackSession so the next
+    // PlaybackStart / progress tick reports the user's current level
+    // instead of a stale value from the previous session.
+    session.set_playback_volume(volume as i32);
+  }
+  // Best-effort push to the running MPV process. Errors are logged but
+  // not propagated — the in-memory + on-disk-on-exit state is already
+  // updated above, so the user's choice is preserved either way.
+  if let Err(e) = state.0.set_volume(volume).await {
+    log::warn!(
+      "mpv_set_volume: failed to push volume to MPV ({}); in-memory value still updated",
+      e
+    );
   }
   playback_control::emit_now_playing_changed(&app, &jellyfin_state).await;
   Ok(())
@@ -1072,8 +1097,8 @@ async fn stop_active_media_server_session(
 /// Config state managed by Tauri.
 pub struct ConfigState(pub Arc<RwLock<AppConfig>>);
 
-const CONFIG_STORE_FILE: &str = "config.json";
-const CONFIG_STORE_KEY: &str = "app_config";
+pub(crate) const CONFIG_STORE_FILE: &str = "config.json";
+pub(crate) const CONFIG_STORE_KEY: &str = "app_config";
 
 /// Get the current app configuration.
 #[tauri::command]
@@ -1206,10 +1231,19 @@ pub fn load_config_from_store(app: &tauri::AppHandle) -> AppConfig {
 
   match app.store(CONFIG_STORE_FILE) {
     Ok(store) => {
+      // Log the store path so we can see which file the store is bound to
+      // — dev mode and release mode can pick different app_config_dir().
+      let store_path = app
+        .path()
+        .app_config_dir()
+        .ok()
+        .map(|d| d.join(CONFIG_STORE_FILE));
+      log::info!("load_config_from_store: store path = {:?}", store_path);
       if let Some(value) = store.get(CONFIG_STORE_KEY) {
+        log::info!("load_config_from_store: got cached value (key present)");
         match serde_json::from_value::<AppConfig>(value.clone()) {
           Ok(config) => {
-            log::info!("Config loaded from disk");
+            log::info!("Config loaded from disk (volume={})", config.volume);
             return config;
           }
           Err(e) => {

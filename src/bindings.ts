@@ -152,6 +152,12 @@ export type AppConfig = {
 	keybindIntroSkip?: string,
 	/**  UI language setting. */
 	locale?: Locale,
+	/**
+	 *  Last volume the user set (0-100). Persisted across restarts so MPV
+	 *  starts at the user's preferred volume instead of the mpv.conf default
+	 *  (typically 100). When `None`, MPV falls back to its own default.
+	 */
+	volume?: number | null,
 };
 
 /**  App notification event emitted to frontend. */

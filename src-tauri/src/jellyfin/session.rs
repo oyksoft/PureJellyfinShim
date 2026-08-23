@@ -3,7 +3,7 @@
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
 use tokio::sync::mpsc;
 
@@ -198,6 +198,15 @@ impl SessionManager {
     update(&mut s.transport);
   }
 
+  /// Mirror the user's current volume into the active PlaybackSession so the
+  /// next PlaybackStart / progress tick reports the user's current level
+  /// instead of a stale value left over from the previous session.
+  pub fn set_playback_volume(&self, volume: i32) {
+    if let Some(ref mut playback) = self.state.write().playback.as_mut() {
+      playback.volume = volume;
+    }
+  }
+
   /// Load series preferences from disk.
   fn load_preferences_from_store(app_handle: &AppHandle) -> HashMap<String, TrackPreference> {
     log::info!("Attempting to load series preferences from store...");
@@ -353,6 +362,12 @@ impl SessionManager {
               IntroSkipperRuntimeConfig::from(&*config.read());
           }
         },
+        || {}, // on_after_play: deliberately a no-op. The MPV seed volume
+               // (`initial_volume`) must only be set by `mpv_set_volume` / SetVolume
+               // paths so the user's choice survives across MPV restarts.
+               // Snapshotting MPV's volume here raced with the loadfile and could
+               // overwrite the user's value with a stale or partial reading
+               // (observed in practice: 87 was clobbering 60).
       );
 
       tokio::spawn(async move {
@@ -382,6 +397,7 @@ impl SessionManager {
         Self::handle_general_command(
           &ctx.client,
           &ctx.state,
+          &ctx.config,
           &ctx.action_tx,
           ctx.app.as_ref(),
           request,
@@ -613,6 +629,33 @@ impl SessionManager {
       Vec::new()
     };
 
+    // Report PlaybackStop for the previous item before starting a new one so the
+    // Jellyfin server keeps clean NowPlayingItem state (stop-then-start, not just
+    // start — matching jellyfin-mpv-shim behaviour).
+    Self::report_playback_stopped(&ctx.client, &ctx.state, &ctx.hls).await;
+
+    // Preserve the user's current volume across track switches. MPV keeps
+    // its own volume state on `loadfile`, so resetting `session.volume`
+    // to 100 here would (a) report 100 to Jellyfin in the PlaybackStart
+    // payload and (b) make any later progress report emit 100 until the
+    // user touches the volume slider. Use MPV's current volume (falling
+    // back to the previous session's volume, then 100). Done outside the
+    // state write lock so we don't hold a non-Send RwLockWriteGuard across
+    // an `.await`.
+    let carried_volume = {
+      let prior = ctx
+        .state
+        .read()
+        .playback
+        .as_ref()
+        .map(|p| p.volume)
+        .unwrap_or(100);
+      match ctx.mpv.get_volume().await {
+        Ok(vol) => vol as i32,
+        Err(_) => prior,
+      }
+    };
+
     // Store playback session and current series
     let replaced_hls_session_id = {
       let mut s = ctx.state.write();
@@ -635,7 +678,7 @@ impl SessionManager {
         position_ticks: resolution.position_ticks,
         is_paused: false,
         is_muted: false,
-        volume: 100,
+        volume: carried_volume,
         audio_stream_index: resolution.audio_stream_index,
         subtitle_stream_index: resolution.subtitle_stream_index,
         play_method: resolution.play_method.to_string(),
@@ -663,6 +706,13 @@ impl SessionManager {
     }
 
     // Report playback started
+    let start_volume = ctx
+      .state
+      .read()
+      .playback
+      .as_ref()
+      .map(|p| p.volume)
+      .unwrap_or(100);
     let start_info = PlaybackStartInfo {
       item_id: item_id.clone(),
       media_source_id: Some(media_source.id.clone()),
@@ -670,7 +720,7 @@ impl SessionManager {
       position_ticks: request.start_position_ticks,
       is_paused: false,
       is_muted: false,
-      volume_level: 100,
+      volume_level: start_volume,
       audio_stream_index: resolution.audio_stream_index,
       subtitle_stream_index: resolution.subtitle_stream_index,
       play_method: resolution.play_method.to_string(),
@@ -873,6 +923,7 @@ impl SessionManager {
   async fn handle_general_command(
     client: &JellyfinClient,
     state: &RwLock<SessionState>,
+    config: &Arc<RwLock<AppConfig>>,
     action_tx: &mpsc::Sender<MpvAction>,
     app: Option<&AppHandle>,
     request: GeneralCommand,
@@ -891,6 +942,19 @@ impl SessionManager {
               if let Some(ref mut playback) = s.playback {
                 playback.volume = volume;
               }
+            }
+            // Mirror into the live AppConfig so the shutdown flush in
+            // `lib.rs` writes the user's *last* volume (not whatever was
+            // loaded at startup). We deliberately do NOT touch the on-disk
+            // store here — it is only flushed at app exit so per-track-switch
+            // MPV restarts never hit the disk.
+            config.write().volume = volume as f64;
+            // Mirror into the MPV seed so the next cold start comes up at
+            // this level instead of jumping back to the mpv.conf default.
+            // Same intent as `mpv_set_volume` on the UI path.
+            if let Some(app) = app {
+              let mpv_state: tauri::State<crate::MpvState> = app.state();
+              mpv_state.0.set_initial_volume(Some(volume as f64));
             }
             let _ = action_tx.send(MpvAction::SetVolume(volume)).await;
           }
@@ -2661,6 +2725,8 @@ mod regression_tests {
   #[test]
   fn playback_position_updates_to_seek_target_after_mpv_reports_new_time_pos() {
     let state = super::tests::test_state_with_intro_range();
+    let config: Arc<RwLock<AppConfig>> = Arc::new(RwLock::new(AppConfig::default()));
+    let mpv: Arc<crate::mpv::MpvClient> = Arc::new(crate::mpv::MpvClient::new(None));
     let event = crate::mpv::MpvEvent {
       event: "property-change".to_string(),
       id: Some(4),
@@ -2670,7 +2736,7 @@ mod regression_tests {
       args: None,
     };
 
-    playback_events::update_state_from_property(&state, &event);
+    playback_events::update_state_from_property(&state, &config, &mpv, &event);
 
     let position_ticks = state
       .read()

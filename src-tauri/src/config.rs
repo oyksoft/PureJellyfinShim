@@ -65,6 +65,16 @@ pub struct AppConfig {
   /// UI language setting.
   #[serde(default)]
   pub locale: Locale,
+
+  /// Last volume the user set (0-100). Persisted across restarts so MPV
+  /// starts at the user's preferred volume instead of the mpv.conf default
+  /// (typically 100). When `None`, MPV falls back to its own default.
+  #[serde(default = "default_volume")]
+  pub volume: f64,
+}
+
+fn default_volume() -> f64 {
+  100.0
 }
 
 #[derive(Debug, Deserialize)]
@@ -92,6 +102,8 @@ struct AppConfigWire {
   keybind_intro_skip: String,
   #[serde(default)]
   locale: Option<Locale>,
+  #[serde(default = "default_volume")]
+  volume: f64,
 }
 
 impl<'de> Deserialize<'de> for AppConfig {
@@ -119,6 +131,7 @@ impl<'de> Deserialize<'de> for AppConfig {
       keybind_prev: wire.keybind_prev,
       keybind_intro_skip: wire.keybind_intro_skip,
       locale: wire.locale.unwrap_or_default(),
+      volume: wire.volume,
     })
   }
 }
@@ -160,6 +173,7 @@ impl Default for AppConfig {
       keybind_prev: default_keybind_prev(),
       keybind_intro_skip: default_keybind_intro_skip(),
       locale: Locale::Auto,
+      volume: default_volume(),
     }
   }
 }

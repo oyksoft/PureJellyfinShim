@@ -19,6 +19,11 @@ pub struct TransportSnapshot {
   player: PlayerState,
   pause: Option<bool>,
   mute: Option<bool>,
+  /// MPV `volume` (0-100), observed via the `property-change` event loop.
+  /// Held here so the web UI's NowPlaying volume stays in sync with MPV
+  /// when the user adjusts via the OSD or keybindings (which never
+  /// round-trip through `mpv_set_volume`).
+  pub(super) volume: Option<f64>,
 }
 
 impl TransportSnapshot {
@@ -50,12 +55,21 @@ impl TransportSnapshot {
         self.mute = value.as_bool();
         self.player.muted = value.as_bool().unwrap_or(false);
       }
+      "volume" => {
+        if let Some(v) = value.as_f64() {
+          self.volume = Some(v);
+          self.player.volume = v;
+        }
+      }
       _ => {}
     }
   }
 
   pub fn project(&self, media_runtime_seconds: Option<f64>) -> PlayerState {
     let mut player = self.player.clone();
+    if let Some(v) = self.volume {
+      player.volume = v;
+    }
     if player.duration <= 0.0 {
       player.duration = media_runtime_seconds.unwrap_or(0.0);
     }

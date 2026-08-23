@@ -106,6 +106,15 @@ pub(super) fn start_mpv_event_listener(
 
       log::info!("Property observations set up, listening for events...");
 
+      // Push an initial progress report right after (re)connecting so the
+      // web UI sees the current MPV state — especially volume — without
+      // waiting for the throttle window or the next property change. This
+      // matters on cold start: `MpvClient::start()` applies the seed volume
+      // before our `observe_property("volume")` call lands, so the change
+      // event is lost; the explicit report here carries the value over.
+      report_progress(&client, &state).await;
+      SessionManager::emit_now_playing_changed(&app_handle, &state).await;
+
       // Track last progress report time to throttle time-pos updates
       let mut last_progress_report = std::time::Instant::now();
       let progress_report_interval = std::time::Duration::from_secs(5);
@@ -122,7 +131,7 @@ pub(super) fn start_mpv_event_listener(
             let should_report = if decision == PropertyReportDecision::Ignore {
               false
             } else {
-              update_state_from_property(&state, &event);
+              update_state_from_property(&state, &ctx.config, &ctx.mpv, &event);
               if property_name == "time-pos" {
                 apply_intro_skipper(&state, &action_tx, &event).await;
               }
@@ -197,8 +206,23 @@ pub(super) fn update_transport_from_property(
 }
 
 /// Update session state from a property-change event.
+///
+/// When the `volume` property changes (which happens any time MPV's volume
+/// changes — including via the player window itself, OSD, keyboard, or
+/// any external IPC client), we also mirror the new value into:
+///   * `config.volume` — so the shutdown flush in `lib.rs` persists the
+///     user's last-set volume across PJS restarts.
+///   * `initial_volume` on `MpvClient` — so the next MPV cold start
+///     (after MPV dies, the user clicks another track, etc.) comes back
+///     at the same level instead of jumping back to the mpv.conf default.
+///
+/// Without these mirrors, `mpv_set_volume` (the PJS UI command path) is
+/// the *only* path that updates persisted volume — which means anything
+/// that changes MPV's volume out-of-band is silently lost on restart.
 pub(super) fn update_state_from_property(
   state: &RwLock<SessionState>,
+  config: &Arc<RwLock<AppConfig>>,
+  mpv: &Arc<crate::mpv::MpvClient>,
   event: &crate::mpv::MpvEvent,
 ) {
   let property_name = event.name.as_deref().unwrap_or("");
@@ -214,6 +238,19 @@ pub(super) fn update_state_from_property(
   };
 
   apply_property_update(playback, property_name, data);
+
+  if property_name == "volume" {
+    if let Some(vol) = data.as_f64() {
+      let vol = vol.clamp(0.0, 100.0);
+      config.write().volume = vol;
+      mpv.set_initial_volume(Some(vol));
+      log::info!(
+        "volume property-change mirrored: config.volume={}, initial_volume={}",
+        vol,
+        vol
+      );
+    }
+  }
 }
 
 /// Apply Intro Skipper seek decisions for a time-position update.

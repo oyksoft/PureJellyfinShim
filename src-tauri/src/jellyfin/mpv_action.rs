@@ -80,6 +80,7 @@ pub struct MpvActionExecutor {
   mpv: MpvClient,
   config: Arc<RwLock<AppConfig>>,
   on_mpv_started: Arc<dyn Fn() + Send + Sync>,
+  on_after_play: Arc<dyn Fn() + Send + Sync>,
   notify_error: Arc<dyn Fn(String) + Send + Sync>,
 }
 
@@ -88,12 +89,14 @@ impl MpvActionExecutor {
     mpv: MpvClient,
     config: Arc<RwLock<AppConfig>>,
     on_mpv_started: impl Fn() + Send + Sync + 'static,
+    on_after_play: impl Fn() + Send + Sync + 'static,
     notify_error: impl Fn(String) + Send + Sync + 'static,
   ) -> Self {
     Self {
       mpv,
       config,
       on_mpv_started: Arc::new(on_mpv_started),
+      on_after_play: Arc::new(on_after_play),
       notify_error: Arc::new(notify_error),
     }
   }
@@ -105,8 +108,9 @@ impl MpvActionExecutor {
     config: Arc<RwLock<AppConfig>>,
     app_handle: tauri::AppHandle,
     on_mpv_started: impl Fn() + Send + Sync + 'static,
+    on_after_play: impl Fn() + Send + Sync + 'static,
   ) -> Self {
-    Self::new(mpv, config, on_mpv_started, move |message| {
+    Self::new(mpv, config, on_mpv_started, on_after_play, move |message| {
       AppNotification::error(&app_handle, message)
     })
   }
@@ -198,6 +202,9 @@ impl MpvActionExecutor {
         }
 
         log::info!("Started playback: {} - {}", title, redact_url(&url));
+        // Fire the post-play hook so the caller can snapshot MPV state (volume,
+        // mute, etc.) for use on the next MPV restart.
+        (self.on_after_play)();
       }
       MpvAction::Pause => {
         log::info!("MpvAction::Pause - setting pause=true");
@@ -399,6 +406,7 @@ mod tests {
           let mpv_started = Arc::clone(&mpv_started);
           move || *mpv_started.lock() += 1
         },
+        || {},
         {
           let notifications = Arc::clone(&notifications);
           move |message| notifications.lock().push(message)

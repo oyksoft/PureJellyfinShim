@@ -24,16 +24,10 @@ const SUPPORTED_REMOTE_COMMANDS: &[&str] = &[
   "ToggleFullscreen",
   "SetAudioStreamIndex",
   "SetSubtitleStreamIndex",
-  // Remote-control commands — required for jellyfin-web to render the
-  // remote control section (which contains the audio/subtitle track
-  // selectors). Even though we don't implement these, listing them
-  // advertises that the session can act as a controllable target.
-  "DisplayMessage",
-  "SendString",
-  "Select",
-  // Required for jellyfin-web's item-details page to show the audio/subtitle
-  // track selectors. Without it the entire track selection area is hidden
-  // (see renderTrackSelections in jellyfin-web's controllers/itemDetails).
+  // Advertised so jellyfin-web renders the audio/subtitle track selectors
+  // for this remote session. PJS does not hard-switch media sources, but the
+  // selector UI drives SetAudioStreamIndex / SetSubtitleStreamIndex, which we
+  // do handle.
   "PlayMediaSource",
 ];
 
