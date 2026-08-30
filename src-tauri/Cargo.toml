@@ -1,6 +1,6 @@
 [package]
 name = "PureJellyfinShim"
-version = "1.5.3"
+version = "1.5.4"
 description = "PureJellyfinShim - A cast receiver for Jellyfin that controls external MPV"
 authors = ["oyksoft"]
 license = "MIT"
@@ -45,7 +45,7 @@ bytes = "1.11.1"
 fs2 = "0.4.3"
 hls_m3u8 = "0.5.1"
 url = "2.5.8"
-jellyfin_api = { version = "10.11.11", path = "media-server-api/jellyfin", features = ["rustls"] }
+jellyfin_api = { version = "12.0.0", path = "media-server-api/jellyfin", features = ["rustls"] }
 emby_api = { version = "4.9.5", path = "media-server-api/emby", features = ["rustls"] }
 tauri-plugin-wdio = { version = "1.2.0", optional = true }
 tauri-plugin-wdio-webdriver = { version = "1.2.0", optional = true }

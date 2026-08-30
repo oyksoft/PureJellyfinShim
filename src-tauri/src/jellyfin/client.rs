@@ -175,7 +175,7 @@ impl JellyfinClient {
     let auth_header = header::HeaderValue::from_str(&self.auth_header(token)).map_err(|err| {
       JellyfinError::HttpError(format!("Invalid Jellyfin authorization header: {err}"))
     })?;
-    headers.insert("X-Emby-Authorization", auth_header);
+    headers.insert("Authorization", auth_header);
 
     let mut configuration = jellyfin_api::apis::configuration::Configuration::new();
     configuration.base_path = server_url.to_string();
@@ -197,7 +197,7 @@ impl JellyfinClient {
     let auth_header = header::HeaderValue::from_str(&self.auth_header(token)).map_err(|err| {
       JellyfinError::HttpError(format!("Invalid Emby authorization header: {err}"))
     })?;
-    headers.insert("X-Emby-Authorization", auth_header);
+    headers.insert("Authorization", auth_header);
 
     let mut configuration = emby_api::apis::configuration::Configuration::new();
     configuration.base_path = server_url.to_string();
@@ -427,18 +427,32 @@ impl JellyfinClient {
     let server_url = Self::normalize_server_url(&creds.server_url)?;
     let configuration = self.openapi_configuration(&server_url, None)?;
 
-    let auth = jellyfin_api::apis::user_api::authenticate_user_by_name(
-      &configuration,
-      jellyfin_api::apis::user_api::AuthenticateUserByNameParams {
-        authenticate_user_by_name: jellyfin_api::models::AuthenticateUserByName {
-          username: Some(Some(creds.username.clone())),
-          pw: Some(Some(creds.password.clone())),
-        },
-      },
-    )
-    .await
-    .map_err(|err| Self::openapi_auth_error("Password authentication", err))
-    .and_then(Self::auth_response_from_openapi)?;
+    // The Jellyfin 12 OpenAPI spec has `additionalProperties: false` on
+    // AuthenticateUserByName — the server rejects extra fields. Only send
+    // Username and Pw as the spec requires.
+    let body = serde_json::json!({
+      "Username": creds.username,
+      "Pw": creds.password,
+    });
+    let resp = configuration
+      .client
+      .post(format!(
+        "{}/Users/AuthenticateByName",
+        configuration.base_path
+      ))
+      .json(&body)
+      .send()
+      .await
+      .map_err(|err| JellyfinError::HttpError(format!("HTTP error: {}", err)))?;
+    if !resp.status().is_success() {
+      let status = resp.status();
+      let text = resp.text().await.unwrap_or_default();
+      return Err(JellyfinError::HttpError(format!("{}: {}", status, text)));
+    }
+    let auth: AuthResponse = resp
+      .json()
+      .await
+      .map_err(|err| JellyfinError::HttpError(format!("Bad auth response: {}", err)))?;
 
     // Store connection state
     {
@@ -576,7 +590,7 @@ impl JellyfinClient {
     let server_url = Self::normalize_server_url(server_url)?;
     let configuration = self.openapi_configuration(&server_url, None)?;
 
-    let request = jellyfin_api::apis::quick_connect_api::initiate_quick_connect(&configuration)
+    let request = jellyfin_api::apis::authentication_api::initiate_quick_connect(&configuration)
       .await
       .map_err(|err| match err {
         jellyfin_api::apis::Error::ResponseError(response)
@@ -606,9 +620,9 @@ impl JellyfinClient {
     let server_url = Self::normalize_server_url(server_url)?;
     let configuration = self.openapi_configuration(&server_url, None)?;
 
-    let state = jellyfin_api::apis::quick_connect_api::get_quick_connect_state(
+    let state = jellyfin_api::apis::authentication_api::get_quick_connect_state(
       &configuration,
-      jellyfin_api::apis::quick_connect_api::GetQuickConnectStateParams {
+      jellyfin_api::apis::authentication_api::GetQuickConnectStateParams {
         secret: secret.to_string(),
       },
     )
@@ -631,9 +645,9 @@ impl JellyfinClient {
     let server_url = Self::normalize_server_url(server_url)?;
     let configuration = self.openapi_configuration(&server_url, None)?;
 
-    let auth = jellyfin_api::apis::user_api::authenticate_with_quick_connect(
+    let auth = jellyfin_api::apis::authentication_api::authenticate_with_quick_connect(
       &configuration,
-      jellyfin_api::apis::user_api::AuthenticateWithQuickConnectParams {
+      jellyfin_api::apis::authentication_api::AuthenticateWithQuickConnectParams {
         quick_connect_dto: jellyfin_api::models::QuickConnectDto {
           secret: secret.to_string(),
         },
@@ -923,7 +937,7 @@ impl JellyfinClient {
       .http
       .get(&url)
       .header(header::USER_AGENT, self.request_user_agent())
-      .header("X-Emby-Authorization", self.auth_header(Some(&token)))
+      .header("Authorization", self.auth_header(Some(&token)))
       .send()
       .await?;
 
@@ -954,7 +968,7 @@ impl JellyfinClient {
       .post(&url)
       .header(header::USER_AGENT, self.request_user_agent())
       .header(header::CONTENT_TYPE, "application/json")
-      .header("X-Emby-Authorization", self.auth_header(Some(&token)))
+      .header("Authorization", self.auth_header(Some(&token)))
       .json(body)
       .send()
       .await?;
@@ -988,7 +1002,7 @@ impl JellyfinClient {
       .post(&url)
       .header(header::USER_AGENT, self.request_user_agent())
       .header(header::CONTENT_TYPE, "application/json")
-      .header("X-Emby-Authorization", self.auth_header(Some(&token)))
+      .header("Authorization", self.auth_header(Some(&token)))
       .json(body)
       .send()
       .await?;
@@ -1083,7 +1097,7 @@ impl JellyfinClient {
     // The file path in media_source.path is on the server, not locally accessible.
     let container = media_source.container.as_deref().unwrap_or("mkv");
     Some(format!(
-      "{}/Videos/{}/stream.{}?Static=true&MediaSourceId={}&api_key={}",
+      "{}/Videos/{}/stream.{}?Static=true&MediaSourceId={}&ApiKey={}",
       server_url, item_id, container, media_source.id, token
     ))
   }
@@ -1128,7 +1142,7 @@ impl JellyfinClient {
     // Jellyfin subtitle endpoint format:
     // /Videos/{itemId}/{mediaSourceId}/Subtitles/{streamIndex}/Stream.{format}
     Some(format!(
-      "{}/Videos/{}/{}/Subtitles/{}/Stream.{}?api_key={}",
+      "{}/Videos/{}/{}/Subtitles/{}/Stream.{}?ApiKey={}",
       server_url, item_id, media_source_id, stream.index, ext, token
     ))
   }
@@ -1153,7 +1167,7 @@ impl JellyfinClient {
     };
 
     Ok(format!(
-      "{}/socket?api_key={}&deviceId={}",
+      "{}/socket?ApiKey={}&deviceId={}",
       ws_url, token, state.device_id
     ))
   }
@@ -1196,7 +1210,7 @@ impl JellyfinClient {
       .post(&url)
       .header(header::USER_AGENT, self.request_user_agent())
       .header(reqwest::header::CONTENT_TYPE, "application/json")
-      .header("X-Emby-Authorization", self.auth_header(Some(&token)))
+      .header("Authorization", self.auth_header(Some(&token)))
       .json(&capabilities)
       .send()
       .await?;
@@ -1678,10 +1692,10 @@ fn absolute_server_url(server_url: &str, path_or_url: &str) -> String {
 }
 
 fn append_api_key_if_missing(url: &str, token: &str) -> String {
-  if url.contains("api_key=") {
+  if url.contains("ApiKey=") || url.contains("api_key=") {
     url.to_string()
   } else {
     let separator = if url.contains('?') { '&' } else { '?' };
-    format!("{}{}api_key={}", url, separator, token)
+    format!("{}{}ApiKey={}", url, separator, token)
   }
 }
