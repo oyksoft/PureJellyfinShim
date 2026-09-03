@@ -222,7 +222,8 @@ export const statusRingPulse = css({
   borderStyle: 'solid',
   borderColor: 'tertiary',
   opacity: '0_1',
-  animation: '[ping 2s cubic-bezier(0, 0, 0.2, 1) infinite]',
+  // Play once on mount, stay at final state. No infinite loop = no CPU drain.
+  animation: '[ping 2s cubic-bezier(0, 0, 0.2, 1) forwards]',
 });
 
 export const statusIcon = css({

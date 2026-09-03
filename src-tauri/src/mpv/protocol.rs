@@ -30,6 +30,7 @@ impl MpvCommand {
   }
 
   /// Load a file for playback.
+  #[allow(dead_code)]
   pub fn loadfile(url: &str) -> Self {
     Self::new(vec!["loadfile".into(), url.into()])
   }
@@ -38,6 +39,7 @@ impl MpvCommand {
   /// Options are passed as comma-separated key=value pairs (e.g., "start=10,sid=2,aid=1").
   /// Note: Since mpv 0.38.0, loadfile has a 4-argument form: loadfile <url> <flags> <index> <options>
   /// We pass -1 for index to use the new 4-argument form correctly.
+  #[allow(dead_code)]
   pub fn loadfile_with_options(url: &str, options: &str) -> Self {
     Self::new(vec![
       "loadfile".into(),
@@ -116,12 +118,6 @@ impl MpvCommand {
       observer_id.into(),
       property.into(),
     ])
-  }
-
-  /// Stop observing a property.
-  #[allow(dead_code)]
-  pub fn unobserve_property(observer_id: i64) -> Self {
-    Self::new(vec!["unobserve_property".into(), observer_id.into()])
   }
 
   /// Add an external subtitle file.

@@ -89,7 +89,7 @@ async fn rewrites_master_and_media_uri_locations_without_credentials() {
         move |Query(params): Query<std::collections::HashMap<String, String>>| {
           let captured = captured_query_clone.clone();
           async move {
-            if let Some(val) = params.get("api_key") {
+            if let Some(val) = params.get("ApiKey").or_else(|| params.get("api_key")) {
               captured.lock().push(val.clone());
             }
             Response::builder()
@@ -118,7 +118,7 @@ async fn rewrites_master_and_media_uri_locations_without_credentials() {
 
   let proxy = HlsProxy::start(Some(temp_dir.path())).unwrap();
   let activated = proxy
-    .activate(Url::parse(&format!("{}/master.m3u8?api_key=SECRET_TOKEN", origin_url)).unwrap())
+    .activate(Url::parse(&format!("{}/master.m3u8?ApiKey=SECRET_TOKEN", origin_url)).unwrap())
     .await
     .unwrap();
 

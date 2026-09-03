@@ -350,6 +350,7 @@ impl MpvClient {
 
   /// Load a file for playback with options.
   /// Options like start position, audio/subtitle track are applied atomically with the file load.
+  #[allow(dead_code)]
   pub async fn loadfile_with_options(
     &self,
     url: &str,
@@ -384,8 +385,14 @@ impl MpvClient {
     options.extend(file_options);
 
     if options.is_empty() {
-      log::info!("Loading file: {}", url);
-      self.send(MpvCommand::loadfile(url)).await?;
+      // Even with no playback options, always use loadfile_with_options
+      // to pass the "replace" flag so the new track replaces the current
+      // one instead of being appended to the playlist. loadfile(url) without
+      // flags defaults to append, which breaks auto-next and queue logic.
+      log::info!("Loading file: {} (replace mode)", url);
+      self
+        .send(MpvCommand::loadfile_with_options(url, ""))
+        .await?;
     } else {
       let options_str = options.join(",");
       log::info!("Loading file: {} with options: {}", url, options_str);

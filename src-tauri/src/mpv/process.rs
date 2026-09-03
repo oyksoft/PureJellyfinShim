@@ -224,7 +224,12 @@ pub fn spawn_mpv(mpv_path: Option<&PathBuf>, extra_args: &[String]) -> Result<Ch
   cmd
     .arg(format!("--input-ipc-server={}", ipc))
     .arg("--idle")
-    .arg("--force-window")
+    // No --force-window: let mpv create the window only when a video
+    // stream is present. Pure audio tracks play silently in the
+    // background, which matches jMS's behavior. When the next track has
+    // video, mpv opens a window automatically.
+    // `keep-open=no` closes the window at natural EOF and fires the
+    // `end-file` event, which is required for auto-next to work.
     .arg("--keep-open=no")
     .arg("--no-terminal")
     .arg("--osc");
@@ -245,9 +250,26 @@ pub fn spawn_mpv(mpv_path: Option<&PathBuf>, extra_args: &[String]) -> Result<Ch
     cmd.arg(arg);
   }
 
+  // Echo MPV's final argv to the PJS log so we can verify the spawned
+  // process actually has the flags we expect (especially --keep-open).
+  // Stdio capture turned out to be unreliable on Windows; this is the
+  // fallback that's guaranteed to work.
+  log::info!(
+    "MPV argv: {} {}",
+    mpv_exe.display(),
+    cmd
+      .get_args()
+      .map(|a| format!("{:?}", a.to_string_lossy()))
+      .collect::<Vec<_>>()
+      .join(" ")
+  );
+
   let child = cmd
     .stdin(Stdio::null())
     .stdout(Stdio::null())
+    // MPV has no native Windows logger and its stderr is line-buffered;
+    // routing it via Stdio::from(File) silently dropped everything when we
+    // tried it. MPV's own --log-file= does flush correctly — use that.
     .stderr(Stdio::null())
     .spawn()?;
 

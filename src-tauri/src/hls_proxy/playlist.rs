@@ -55,6 +55,7 @@ pub struct PlaylistEntry {
 }
 
 const EMBY_CREDENTIAL_PARAMS: &[&str] = &[
+  "ApiKey",
   "api_key",
   "X-Emby-Token",
   "X-MediaBrowser-Token",

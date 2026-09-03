@@ -38,17 +38,24 @@ bun install
 bun tauri build
 ```
 
-构建产物：`src-tauri/target/release/bundle/nsis/PureJellyfinShim_1.5.3_x64-setup.exe`
+构建产物：`src-tauri/target/release/bundle/nsis/PureJellyfinShim_1.5.5_x64-setup.exe`
+
+## v1.5.5 更新
+
+这一版主要解决了上一版（1.5.4）回归的几个投屏体验问题，并打磨了 MPV 双向同步：
+
+- **自动播放下一首恢复正常**：之前在切歌/切剧集时会停在最后一首上，现在音乐专辑能按顺序播完整张，剧集也能自动连播下一集。
+- **连续播放视频不再闪屏**：之前连续播两个视频时 MPV 窗口会一闪一闪地重启，现在复用同一个 MPV 进程，切换更平滑。
+- **音乐播放不再弹出封面窗口**：之前带封面的音乐文件（如 flac、专辑图）会弹出一个显示封面的 MPV 窗口。现在所有音频文件统一纯后台播放，无论有没有封面都不会有窗口，视频文件照常开窗。
+- **jellyfin-web 与 MPV 双向进度条/暂停立即同步**：之前从 web 端拖进度条或暂停时，jellyfin-web 经常要等几秒甚至"弹回"原位。现在双向都接近实时——在 web 端拖动进度条、MPV 窗口拖动进度条、键盘跳转、OSD 跳转，UI 都能即时同步。
+
+## v1.5.4 更新
+
+- **兼容 Jellyfin 12**：适配 Jellyfin 12 的认证变更，修复登录问题。Jellyfin 12 禁用旧版 `X-Emby-Authorization` 头和 `api_key` 查询参数，改为标准 `Authorization` 头和 `ApiKey` 参数；同时移除登录请求中的多余 `App` 字段。
 
 ## v1.5.3 更新
 
-- **修复音量同步和持久化（核心修复）**：之前用户调整音量后退出 PJS，下次启动时会被还原为错误的历史值（典型情况：用户从 87 调到 60，关闭再开又是 87），且部分路径下音量完全没写入内存。根因是 `config.volume` 和 `MpvClient::initial_volume` 的更新只走 PJS UI 的 `mpv_set_volume` Tauri 命令一条路径——web 端的 `GeneralCommand::SetVolume` 和 MPV 自身（键盘/OSD/外部客户端）的 `property-change` 事件完全没碰这两个值。现在三条路径（UI / web / MPV 自身）都会同步更新 `session.volume`（上报 Jellyfin）+ `config.volume`（退出时写盘）+ `initial_volume`（MPV冷启动时应用）。
-- **`mpv_set_volume` 写入顺序修复**：之前 `state.set_volume(MPV).await` 先执行，失败就 `?` 返回，导致后面的内存更新被全部跳过。MPV 关闭或 IPC 瞬时错误时音量会被静默丢弃。现在三处更新无条件放在最前面，MPV 推送改成 best-effort。
-- **MPV 冷启动时种子音量的可靠应用**：之前 `start()` 只发一次 `set_property volume`，MPV 刚启动时 IPC server 还没完全 ready，命令被丢弃，MPV 保持 mpv.conf 默认音量（`volume=87` 就是用户反复看到的幽灵值）。现在记日志 + 失败 150ms 重试 + 读回实际音量验证（差距 >0.5 再补一次），日志里能看到 `Applied initial volume {} to MPV` / `verified MPV volume = {}`。
-- **删除 `on_after_play` hook 覆盖 `initial_volume` 的副作用**：该 hook 在播放后读 MPV 音量回写种子音量，但 `tokio::spawn` 异步执行和 `set_property volume` 命令生效之间存在时序竞争，会读到中间状态。改成 no-op，`initial_volume` 只在用户调音量时设置。
-- **退出 PJS 写盘错误日志化**：之前 `let _ = store.save()` 吞掉错误，现在区分打开 store 失败和 save 失败，分别记 error 并明确提示 "volume NOT persisted!"。
-
-清理：删除未使用的 `MpvClient::disconnect()` 方法；MPV IPC 事件通道从 100 扩到 1000（避免 `time-pos` 60Hz 把通道填满、丢失音量/进度/暂停事件）。
+- 修复音量同步问题：用户调整音量后退出 PJS，下次再启动时音量会被错误恢复到旧值（比如历史记录里的 87），且某些场景下音量调整完全没写入内存。覆盖了所有调音量路径（UI / web 端 SetVolume / MPV 端 OSD 和快捷键），关闭 PJS 时正确写盘。
 
 ## v1.5.2 更新
 

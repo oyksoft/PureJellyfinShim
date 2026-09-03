@@ -9,7 +9,7 @@ import {
   Settings,
   XCircle,
 } from 'lucide-solid';
-import { createMemo, Match, Show, Switch } from 'solid-js';
+import { createMemo, createSignal, Match, Show, Switch } from 'solid-js';
 import { fetchConnectionState } from '~effects/connection';
 import { fetchSavedServiceProfiles } from '~effects/profiles';
 import { queryKeys, runExit } from '~effects/query';
@@ -40,6 +40,11 @@ export default function HomePage() {
   const clearLibraryQueries = () => {
     queryClient.removeQueries({ queryKey: queryKeys.libraryRoot });
   };
+
+  // Bumped on each refresh click to remount the status ring pulse element and
+  // re-trigger the ping animation. Stays 0 when not animating so the halo
+  // isn't rendered.
+  const [pulseKey, setPulseKey] = createSignal(0);
 
   const refreshMutation = createMutation(() => ({
     mutationFn: async () => {
@@ -82,6 +87,7 @@ export default function HomePage() {
 
   const handleRefresh = () => {
     if (refreshMutation.isPending) return;
+    setPulseKey((k) => k + 1);
     void refreshMutation.mutateAsync();
   };
 
@@ -138,7 +144,11 @@ export default function HomePage() {
         <div class={styles.statusSection}>
           <div class={styles.statusRing}>
             <Show when={connectionStatus() === 'connected'}>
-              <div class={styles.statusRingPulse} />
+              {/* keyed Show remounts on each pulseKey bump so the ping animation
+                  replays when the user clicks Refresh. */}
+              <Show keyed when={pulseKey()}>
+                {(_key) => <div class={styles.statusRingPulse} />}
+              </Show>
             </Show>
             <div class={styles.statusRingOuter} />
             <Switch>

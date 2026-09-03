@@ -2,6 +2,27 @@
 
 All notable changes to JellyPilot are documented in this file.
 
+## [1.5.5] - 2026-09-04
+
+### Fixed
+- **恢复自动播放下一首**：之前为了修窗口显示问题把 MPV 切到 `keep-open=always`，但这会让 MPV 在自然结束时不再发送 `end-file` 事件，自动连播（音乐下一首、剧集下一集）全部失效。改回 `keep-open=no`，自然结束 → `end-file` → `play_adjacent_episode` → 自动连播恢复。
+- **修复视频→视频每次都重启 MPV**：`session.rs` 之前对所有视频播放都强制重启 MPV，导致视频→视频连续播放时窗口一闪一闪。新增 `SessionState::previous_item_type` 字段记录上一项的类型，只有 audio↔video 切换才重启 MPV，同类型切换（audio→audio、video→video）复用现有 MPV 进程。该字段特意不被 `clear_playback_context` 清掉，所以即便 jellyfin-web 发了 Stop+Play 序列，下一次播放仍能正确判断上一项类型。
+- **jellyfin-web 拖动进度条/暂停立即同步**（web→MPV）：之前拖动进度条时，PJS 只更新本地状态但不立即告诉服务器，jellyfin-web 轮询看到的是旧位置，进度条会"弹回"再跳到拖动位置。修复双管齐下：（1）新增 `report_progress_at(client, state, position_ticks)`，不读 state里的实时位置（防止被 MPV 的旧 time-pos 事件覆盖），直接用用户拖动的目标位置上报；（2）Seek 后强制 `last_report_time = NOW`（不是绕过节流），让后续 5 秒内的旧 time-pos 事件被压制，避免覆盖 jellyfin-web。Pause/Unpause/PlayPause 也走同样路径。
+- **MPV 端跳转立即同步到 jellyfin-web**（MPV→web）：之前完全没监听 MPV 的 `seek` 事件，依赖 5 秒定期 progress 报告节流窗口。从 MPV 窗口拖动进度条、键盘跳转、OSD 跳转后，jellyfin-web 要等最多 5 秒才看到新位置。现在在 MPV `seek` 事件处理器里查询 MPV 的实际 `time-pos`、更新 state、立即 `report_progress` 到 Jellyfin。
+- **音频（含封面）不再创建 MPV 窗口**：之前音频文件若带有封面（很多 flac/mp3 专辑都有），MPV 会创建一个显示封面的窗口。最小化窗口后自动切下一首时，MPV 重新创建窗口时进入"完全隐藏"的诡异状态。给 `MpvAction::Play` 加 `is_audio` 标志，executor 在 `loadfile` 前根据它设置 `vid=no`（音频）或 `vid=auto`（视频），从此音频文件无论有没有封面都纯后台播放，没有窗口；视频则恢复默认的视频输出，覆盖之前音频留下的 `vid=no`。
+
+### Maintenance
+- 删除 `MpvClient::play_via_playlist` 和 `MpvClient::enqueue_and_play` 两个 dead code 方法（之前尝试用 playlist API 切歌失败后废弃）。
+- 删除 `MpvCommand::playlist_add/clear/play_index/remove_index` 和 `MpvCommand::unobserve_property`，上层已不再使用。
+- 删除 `MpvClient::get_playlist_count`（dead code）。
+- 删除根目录遗留的 0 字节 `nul` 文件。
+- 清理调试日志：`Reporting progress` 从 INFO 降到 DEBUG（每 5 秒一次太频繁）。
+
+## [1.5.4] - 2026-08-31
+
+### Fixed
+- **兼容 Jellyfin 12**：适配 Jellyfin 12 的认证变更，修复登录问题。Jellyfin 12 禁用旧版 `X-Emby-Authorization` 头和 `api_key` 查询参数，改为标准 `Authorization` 头和 `ApiKey` 参数；同时移除登录请求中的多余 `App` 字段。
+
 ## [1.5.3] - 2026-08-24
 
 ### Fixed

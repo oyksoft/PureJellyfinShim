@@ -27,6 +27,10 @@ pub enum MpvAction {
     audio_index: Option<i32>,
     subtitle_index: Option<i32>,
     play_method: &'static str,
+    /// True if the item is audio-only. The executor sets `vid=no` before
+    /// loadfile so audio tracks with embedded cover art don't create a
+    /// video window in MPV.
+    is_audio: bool,
   },
   /// Add an external subtitle file.
   AddExternalSubtitle(String),
@@ -125,6 +129,7 @@ impl MpvActionExecutor {
         audio_index,
         subtitle_index,
         play_method,
+        is_audio,
       } => {
         log::info!(
           "MpvAction::Play received, url={}, title={}",
@@ -153,6 +158,20 @@ impl MpvActionExecutor {
           let _config = self.config.read();
           direct_playback_file_options(play_method, &[])
         };
+
+        // Disable video output for audio-only items so MPV doesn't create a
+        // window for tracks with embedded cover art. For video items, set
+        // `vid=auto` to override any previous `vid=no` left by an audio load.
+        // (MPV's `vid` accepts `no`/`auto`/track-ID — `yes` is not valid.)
+        let vid_value = if is_audio { "no" } else { "auto" };
+        log::info!(
+          "Setting vid={} for {} item",
+          vid_value,
+          if is_audio { "audio" } else { "video" }
+        );
+        if let Err(e) = self.mpv.set_property_string("vid", vid_value).await {
+          log::warn!("Failed to set vid={}: {}", vid_value, e);
+        }
 
         // Load the file with all options (start position, audio/subtitle tracks)
         // This ensures tracks are set atomically with the file load, avoiding race conditions
@@ -449,6 +468,7 @@ mod tests {
         audio_index: Some(2),
         subtitle_index: Some(-1),
         play_method: "DirectPlay",
+        is_audio: false,
       })
       .await;
 
@@ -592,6 +612,7 @@ mod tests {
         audio_index: None,
         subtitle_index: None,
         play_method: "Transcode",
+        is_audio: false,
       })
       .await;
 

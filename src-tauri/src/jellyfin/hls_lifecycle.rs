@@ -378,6 +378,7 @@ async fn recover_expired_transcode(old_proxy_session_id: &str, ctx: &PlayContext
       title: super::session::SessionManager::format_title(&item),
       audio_index: resolution.mpv_audio_index,
       subtitle_index: resolution.mpv_subtitle_index,
+      is_audio: !super::session::SessionManager::is_video_item(&item),
     })
     .await;
   if let Some(ext_sub_stream) = resolution.external_subtitle_stream {

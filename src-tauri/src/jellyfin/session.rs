@@ -53,6 +53,10 @@ pub(super) struct SessionState {
   pub(super) current_series_id: Option<String>,
   /// Current item being played (for next episode lookup).
   pub(super) current_item: Option<MediaItem>,
+  /// Type of the previous item (for audio↔video transition detection).
+  /// Unlike `current_item`, this is NOT cleared by `clear_playback_context`
+  /// so it survives MPV restarts and event loop state clears.
+  pub(super) previous_item_type: Option<bool>,
   /// Current media streams (for looking up track languages).
   pub(super) current_media_streams: Vec<MediaStream>,
   /// Track preferences per series (key: series_id).
@@ -122,6 +126,7 @@ impl SessionManager {
         effective_intro_skipper_config: IntroSkipperRuntimeConfig::from(&*config.read()),
         current_series_id: None,
         current_item: None,
+        previous_item_type: None,
         current_media_streams: Vec::new(),
         series_preferences,
         recorded_notifications: Vec::new(),
@@ -656,6 +661,10 @@ impl SessionManager {
       }
     };
 
+    // Read previous item type from the dedicated field (not from current_item,
+    // which may be cleared by clear_playback_context after MPV exits).
+    let prev_is_video = ctx.state.read().previous_item_type.unwrap_or(false);
+
     // Store playback session and current series
     let replaced_hls_session_id = {
       let mut s = ctx.state.write();
@@ -665,6 +674,10 @@ impl SessionManager {
         .and_then(|playback| playback.hls_proxy_session_id.clone());
       s.current_series_id = item.series_id.clone();
       s.current_item = Some(item.clone());
+      // Update previous_item_type AFTER setting current_item so it reflects the
+      // type of the item just played. The next handle_play will read this as
+      // "the type of the previous play".
+      s.previous_item_type = s.current_item.as_ref().map(Self::is_video_item);
       s.current_media_streams = media_source.media_streams.clone();
       // Re-seed Now Playing transport for the new session so stale per-item
       // state never leaks across sessions; observations reconcile the rest.
@@ -705,6 +718,13 @@ impl SessionManager {
       hls_lifecycle::start_hls_event_consumer(activated, ctx.clone());
     }
 
+    // When switching between audio and video, report the old session as stopped
+    // so jellyfin-web transitions the session and shows the correct control bar.
+    if prev_is_video != Self::is_video_item(&item) {
+      log::info!("Media type switching: reporting previous session stopped before new playback");
+      Self::report_playback_stopped(&ctx.client, &ctx.state, &ctx.hls).await;
+    }
+
     // Report playback started
     let start_volume = ctx
       .state
@@ -740,6 +760,31 @@ impl SessionManager {
       resolution.subtitle_stream_index,
       resolution.mpv_subtitle_index
     );
+
+    // Only restart MPV when switching between audio and video playback.
+    // Restarting is needed because mpv 0.41's SMTC integration can leave the
+    // MPV window in a broken state after a loadfile cycle (minimized window,
+    // wrong rendering context, etc.). A clean MPV start gives a brand-new
+    // window with correct state. For same-type transitions (audio→audio or
+    // video→video), reusing the existing MPV process avoids the flicker of a
+    // full restart.
+    let is_video = Self::is_video_item(&item);
+    log::info!(
+      "MPV restart decision: prev_is_video={}, is_video={}, item_type={}",
+      prev_is_video,
+      is_video,
+      item.item_type
+    );
+    // Only restart when switching between audio and video. audio→video: need
+    // clean video window. video→audio: no window needed for audio. Same type
+    // transitions reuse the existing MPV process.
+    if is_video != prev_is_video {
+      log::info!("Media type switching (audio↔video), restarting MPV for clean window state");
+      let _ = ctx.action_tx.send(MpvAction::Stop).await;
+    } else if is_video {
+      log::info!("Same video-type transition, reusing existing MPV process");
+    }
+
     let _ = ctx
       .action_tx
       .send(MpvAction::Play {
@@ -749,6 +794,7 @@ impl SessionManager {
         title,
         audio_index: resolution.mpv_audio_index,
         subtitle_index: resolution.mpv_subtitle_index,
+        is_audio: !Self::is_video_item(&item),
       })
       .await;
     log::info!("MpvAction::Play sent successfully");
@@ -796,7 +842,7 @@ impl SessionManager {
   /// track. Item types are Jellyfin / Emby model values; we only treat the
   /// well-known video kinds as video and let everything else fall through to
   /// the "no raise" path.
-  fn is_video_item(item: &MediaItem) -> bool {
+  pub(super) fn is_video_item(item: &MediaItem) -> bool {
     matches!(
       item.item_type.as_str(),
       "Movie" | "Episode" | "Video" | "Series"
@@ -817,8 +863,15 @@ impl SessionManager {
           let mut s = ctx.state.write();
           if let Some(playback) = s.playback.as_mut() {
             playback.is_paused = true;
+            // Force the throttle to NOW so the next periodic time-pos
+            // event doesn't immediately undo this explicit report with a
+            // stale position from MPV's mid-decode state.
+            s.last_report_time = std::time::Instant::now();
           }
         }
+        // Immediately report so jellyfin-web reflects the pause without waiting
+        // for the next 5-second progress throttle window.
+        playback_events::report_progress(&ctx.client, &ctx.state).await;
         let _ = ctx.action_tx.send(MpvAction::Pause).await;
       }
       "Unpause" => {
@@ -827,8 +880,11 @@ impl SessionManager {
           let mut s = ctx.state.write();
           if let Some(playback) = s.playback.as_mut() {
             playback.is_paused = false;
+            // Same throttle suppression as Pause.
+            s.last_report_time = std::time::Instant::now();
           }
         }
+        playback_events::report_progress(&ctx.client, &ctx.state).await;
         let _ = ctx.action_tx.send(MpvAction::Resume).await;
       }
       "PlayPause" => {
@@ -850,16 +906,20 @@ impl SessionManager {
             let mut s = ctx.state.write();
             if let Some(playback) = s.playback.as_mut() {
               playback.is_paused = false;
+              s.last_report_time = std::time::Instant::now();
             }
           }
+          playback_events::report_progress(&ctx.client, &ctx.state).await;
           let _ = ctx.action_tx.send(MpvAction::Resume).await;
         } else {
           {
             let mut s = ctx.state.write();
             if let Some(playback) = s.playback.as_mut() {
               playback.is_paused = true;
+              s.last_report_time = std::time::Instant::now();
             }
           }
+          playback_events::report_progress(&ctx.client, &ctx.state).await;
           let _ = ctx.action_tx.send(MpvAction::Pause).await;
         }
       }
@@ -870,8 +930,22 @@ impl SessionManager {
             let mut s = ctx.state.write();
             if let Some(playback) = s.playback.as_mut() {
               playback.position_ticks = ticks;
+              // Force the throttle to NOW so the next periodic time-pos
+              // report is suppressed for ~5 seconds. MPV's seek is async
+              // and for video it can take several hundred ms (buffer flush
+              // + decode restart) before time-pos events reflect the new
+              // position. If we let those stale OLD-position events flow
+              // through immediately, jellyfin-web reverts the seek bar
+              // back to the old position, undoing our explicit report.
+              s.last_report_time = std::time::Instant::now();
             }
           }
+          // Report the seek position to Jellyfin IMMEDIATELY using the
+          // requested position directly, not whatever MPV's time-pos event
+          // handler may have overwritten state with. Reporting the seek
+          // target synchronously here avoids the race where jellyfin-web
+          // sees the old position and snaps back.
+          playback_events::report_progress_at(&ctx.client, &ctx.state, ticks).await;
           let _ = ctx.action_tx.send(MpvAction::Seek(position)).await;
         }
       }
@@ -1439,6 +1513,7 @@ fn parse_command_int(value: Option<&serde_json::Value>) -> Option<i64> {
 /// Redact sensitive URL/header fragments from log text.
 pub(super) fn redact_url(url: &str) -> String {
   const SENSITIVE_KEYS: &[&str] = &[
+    "ApiKey",
     "api_key",
     "access_token",
     "accesstoken",
@@ -1660,6 +1735,7 @@ mod tests {
       },
       current_series_id: None,
       current_item: None,
+      previous_item_type: None,
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
@@ -1705,6 +1781,7 @@ mod tests {
       effective_intro_skipper_config: IntroSkipperRuntimeConfig::from(&AppConfig::default()),
       current_series_id: None,
       current_item: None,
+      previous_item_type: None,
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
@@ -1745,6 +1822,7 @@ mod tests {
       effective_intro_skipper_config: IntroSkipperRuntimeConfig::from(&AppConfig::default()),
       current_series_id: None,
       current_item: None,
+      previous_item_type: None,
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
@@ -1801,6 +1879,7 @@ mod tests {
       effective_intro_skipper_config: IntroSkipperRuntimeConfig::from(&AppConfig::default()),
       current_series_id: None,
       current_item: None,
+      previous_item_type: None,
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
@@ -1894,6 +1973,7 @@ mod tests {
       effective_intro_skipper_config: IntroSkipperRuntimeConfig::from(&AppConfig::default()),
       current_series_id: None,
       current_item: None,
+      previous_item_type: None,
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
@@ -2483,7 +2563,7 @@ mod emby_hls_tests {
 
     let (url, _) = harness.play_start("movie-mp4").await;
 
-    assert!(url.ends_with("/videos/transcode.m3u8?api_key=emby-token"));
+    assert!(url.ends_with("/videos/transcode.m3u8?ApiKey=emby-token"));
     let playback = harness
       .state
       .read()
@@ -2528,7 +2608,7 @@ mod emby_hls_tests {
 
     let (url, _) = harness.play_start("movie-live").await;
 
-    assert!(url.ends_with("/videos/transcode.m3u8?api_key=emby-token"));
+    assert!(url.ends_with("/videos/transcode.m3u8?ApiKey=emby-token"));
     let playback = harness
       .state
       .read()
@@ -2566,7 +2646,7 @@ mod emby_hls_tests {
     let (url, _) = harness.play_start("movie-jf").await;
 
     assert!(url.contains("/videos/transcode.m3u8"));
-    assert!(url.contains("api_key=token-1"));
+    assert!(url.contains("ApiKey=token-1"));
     assert!(
       !url.contains("/hls/"),
       "Jellyfin playback must not enter the HLS proxy: {}",
@@ -2804,9 +2884,10 @@ mod regression_tests {
     let input = concat!(
       "http://media.test/Videos/1/stream.mkv?MediaSourceId=source-1",
       "&api_key=stream-token",
+      "&ApiKey=stream-token",
       "&AccessToken=access-token",
       "&password=login-secret",
-      " ws://media.test/socket?api_key=socket-token&deviceId=device-1"
+      " ws://media.test/socket?ApiKey=socket-token&deviceId=device-1"
     );
 
     let redacted = redact_url(input);
@@ -2816,6 +2897,7 @@ mod regression_tests {
     assert!(!redacted.contains("login-secret"));
     assert!(!redacted.contains("socket-token"));
     assert!(redacted.contains("api_key=[REDACTED]"));
+    assert!(redacted.contains("ApiKey=[REDACTED]"));
     assert!(redacted.contains("AccessToken=[REDACTED]"));
     assert!(redacted.contains("password=[REDACTED]"));
     assert!(redacted.contains("deviceId=device-1"));
@@ -2845,6 +2927,7 @@ mod regression_tests {
       effective_intro_skipper_config: IntroSkipperRuntimeConfig::from(&AppConfig::default()),
       current_series_id: None,
       current_item: None,
+      previous_item_type: None,
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
@@ -2978,6 +3061,7 @@ mod regression_tests {
         run_time_ticks: Some(15_000_000_000),
         overview: None,
       }),
+      previous_item_type: None,
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),

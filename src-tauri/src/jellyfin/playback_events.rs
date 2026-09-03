@@ -175,6 +175,26 @@ pub(super) fn start_mpv_event_listener(
                 proxy.cancel_prefetch(&proxy_session_id);
               }
             }
+            // Push the new position to Jellyfin immediately so jellyfin-web's
+            // progress bar reflects MPV-initiated seeks (OSD, keyboard, drag on
+            // MPV window) without waiting for the 5-second progress throttle.
+            // We query MPV for the actual position rather than relying on the
+            // time-pos events that will follow, since those race with our report
+            // and would otherwise show a stale value to jellyfin-web.
+            if let Ok(actual_seconds) = ctx.mpv.get_time_pos().await {
+              let actual_ticks = seconds_to_ticks(actual_seconds);
+              {
+                let mut s = state.write();
+                if let Some(playback) = s.playback.as_mut() {
+                  playback.position_ticks = actual_ticks;
+                  // Reset throttle so the immediate next time-pos event (still
+                  // reporting the old pre-seek value while MPV buffers) does
+                  // not fire a stale report and undo what we just sent.
+                  s.last_report_time = std::time::Instant::now();
+                }
+              }
+              report_progress(&client, &state).await;
+            }
           }
           _ => {
             // Ignore other events
@@ -330,6 +350,38 @@ pub(super) async fn report_progress(client: &JellyfinClient, state: &RwLock<Sess
     return;
   };
 
+  report_progress_inner(client, &session, session.position_ticks).await;
+}
+
+/// Report progress with an explicit position override.
+///
+/// Use this from Seek/pause-like user commands where you want Jellyfin to
+/// see the user's requested position immediately, without waiting for MPV's
+/// async property events to reconcile. MPV's time-pos event handler runs
+/// concurrently and may overwrite `state.position_ticks` with a stale value
+/// while the seek command is in flight, so reading from state would race.
+pub(super) async fn report_progress_at(
+  client: &JellyfinClient,
+  state: &RwLock<SessionState>,
+  position_ticks: i64,
+) {
+  let session = {
+    let s = state.read();
+    s.playback.clone()
+  };
+
+  let Some(session) = session else {
+    return;
+  };
+
+  report_progress_inner(client, &session, position_ticks).await;
+}
+
+async fn report_progress_inner(
+  client: &JellyfinClient,
+  session: &PlaybackSession,
+  position_ticks: i64,
+) {
   if session.hls_recovering {
     // Progress belongs to the old transcode generation during recovery
     return;
@@ -339,17 +391,24 @@ pub(super) async fn report_progress(client: &JellyfinClient, state: &RwLock<Sess
     item_id: session.item_id.clone(),
     media_source_id: session.media_source_id.clone(),
     play_session_id: session.play_session_id.clone(),
-    position_ticks: Some(session.position_ticks),
+    position_ticks: Some(position_ticks),
     is_paused: session.is_paused,
     is_muted: session.is_muted,
     volume_level: session.volume,
     audio_stream_index: session.audio_stream_index,
     subtitle_stream_index: session.subtitle_stream_index,
-    play_method: session.play_method,
+    play_method: session.play_method.clone(),
     can_seek: true,
   };
 
-  log::debug!("Progress payload: {:?}", progress);
+  log::debug!(
+    "Reporting progress: item={} position_ticks={} ({}s) play_session_id={:?} method={}",
+    session.item_id,
+    position_ticks,
+    position_ticks as f64 / 10_000_000.0,
+    session.play_session_id,
+    session.play_method
+  );
 
   if let Err(e) = client.playback().report_playback_progress(&progress).await {
     log::error!("Failed to report playback progress: {}", e);
@@ -486,6 +545,9 @@ pub(super) async fn clear_playback_context(
   s.current_series_id = None;
   s.current_media_streams.clear();
   s.transport.clear();
+  // NOTE: previous_item_type is intentionally NOT cleared here. It must survive
+  // MPV restarts and event-loop state clears so that video→video transitions
+  // are correctly detected even when jellyfin-web sends Stop followed by Play.
   log::info!("Playback context cleared");
 }
 
