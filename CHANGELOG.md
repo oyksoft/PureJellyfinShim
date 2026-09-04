@@ -2,6 +2,17 @@
 
 All notable changes to JellyPilot are documented in this file.
 
+## [1.5.6] - 2026-09-04
+
+### Fixed
+- **音频↔视频切换后 web 端控制条消失 / 进度条不同步**：`handle_play` 在 commit 新会话到 state 之后才发 `MpvAction::Stop`，导致旧 MPV 被杀后 listener 的 channel-close cleanup 走 `report_playback_stopped` 路径，`s.playback.take()` 静默把新会话从 state 里取走。之后新 MPV 的 `seek` / `property-change` 事件全部因 `state.playback == None` 被静默丢弃，jellyfin-web 看到的 NowPlayingItem 永远停在旧位置、并且常常显示旧 item 的播放条。新增 `SessionState::playback_setup_at` 时间戳：`handle_play` commit 新会话时打戳，listener cleanup 在 `<5s` 内识别为"计划内 audio↔video 重启"直接跳过清理（避免破坏新会话），超过 5s 或为 `None` 走原来的清理路径（处理非预期 MPV 退出）。listener 成功绑定到新 IPC 后清空该时间戳，避免误吞后续真实的退出信号。
+- **关闭 MPV 窗口后 jellyfin-web 控制条不消失**：`TransportSnapshot::clear()` 之前等价于 `*self = Self::default()`，但 `Default` 派生对 bool 字段是 `false`，而 `PlayerState::default` 的 `connected` 也未显式标 `false`，整个清理路径依赖"重置整个 struct"的副作用。改成显式 `self.player.connected = false` 并 `self.player.paused = true`，停止流程里 `emit_now_playing_changed` 拿到的状态一定反映"已断开、暂停"。
+- **重复 `report_playback_stopped` 误吞新会话**：`handle_play` 在写入新会话到 state 之后又调了一次 `report_playback_stopped`（仅 audio↔video 分支），意图是"切类型时让 jellyfin-web 看到旧 session 已停"。但此时 `state.playback` 已经是新会话，`take()` 把它拿走。该调用是冗余的——上面的通用 stop-before-start 已经处理过旧会话。整块删除，避免和新会话的 commit 顺序竞争。
+- **MP3/FLAC 等音频文件播放时 MPV 也开窗**：`MpvClient::start()` 之前从不发 `vid=no`，音频若带封面 art 就会创建窗口，最小化后切下一首时 MPV 重新开窗进入"完全隐藏"状态。`MpvAction::Play` 加 `is_audio` 字段，executor 在 `loadfile` 前根据它 `set_property vid no`（音频）或 `vid auto`（视频），覆盖之前音频留下的 `vid=no`。
+
+### Maintenance
+- 同步把 `src-tauri/Cargo.toml`（Jellyfin 看到的 `CLIENT_VERSION`，由 `env!("CARGO_PKG_VERSION")` 注入）从 1.5.4 升到 1.5.6——之前漏更新，服务器侧一直显示旧版本号。`tauri.conf.json` 和 `package.json` 同步。
+
 ## [1.5.5] - 2026-09-04
 
 ### Fixed

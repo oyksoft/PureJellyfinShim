@@ -67,27 +67,44 @@ pub(super) fn start_mpv_event_listener(
       mpv: mpv.clone(),
     };
 
+    // Observer IDs for different properties
+    const OBS_PAUSE: i64 = 1;
+    const OBS_VOLUME: i64 = 2;
+    const OBS_MUTE: i64 = 3;
+    const OBS_TIME_POS: i64 = 4;
+    const OBS_DURATION: i64 = 5;
+
+    // Track last progress report time to throttle time-pos updates
+    let mut last_progress_report = std::time::Instant::now();
+    let progress_report_interval = std::time::Duration::from_secs(5);
+
+    // Outer loop: each iteration waits for MPV to (re)connect, sets up observers,
+    // then processes events. When the channel closes (MPV exits), the inner loop
+    // exits and the outer loop retries — getting a FRESH receiver from the new
+    // IPC connection. This is critical: `mpv.events()` returns a new channel each
+    // time MPV restarts, so we must call it again, not hold onto the old receiver.
     loop {
-      // Try to get the event receiver
-      let event_rx = match mpv.events() {
-        Some(rx) => rx,
-        None => {
-          // MPV not connected yet, wait and retry
-          tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-          continue;
+      // Wait for MPV to be connected and get a receiver for THIS connection.
+      // The receiver is tied to a specific IPC channel; when MPV restarts and
+      // creates a new IPC connection, mpv.events() returns a different channel.
+      let event_rx = loop {
+        if let Some(rx) = mpv.events() {
+          log::info!("Event listener: got event receiver from IPC");
+          break rx;
         }
+        log::debug!("Event listener: mpv.events()=None, waiting for MPV...");
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
       };
 
-      log::info!("Got MPV event receiver, setting up property observations...");
+      log::info!("Setting up property observations...");
 
-      // Observer IDs for different properties
-      const OBS_PAUSE: i64 = 1;
-      const OBS_VOLUME: i64 = 2;
-      const OBS_MUTE: i64 = 3;
-      const OBS_TIME_POS: i64 = 4;
-      const OBS_DURATION: i64 = 5;
+      // We've successfully bound to a (possibly new) IPC connection. The
+      // planned-restart grace window has now resolved: any future MPV exit
+      // is an unexpected exit, so clear the "recently replaced" stamp so
+      // the channel-closed branch actually tears state down next time.
+      state.write().playback_setup_at = None;
 
-      // Set up property observations
+      // Set up observers for this connection
       if let Err(e) = mpv.observe_property(OBS_PAUSE, "pause").await {
         log::warn!("Failed to observe pause: {}", e);
       }
@@ -104,109 +121,131 @@ pub(super) fn start_mpv_event_listener(
         log::warn!("Failed to observe duration: {}", e);
       }
 
-      log::info!("Property observations set up, listening for events...");
-
-      // Push an initial progress report right after (re)connecting so the
-      // web UI sees the current MPV state — especially volume — without
-      // waiting for the throttle window or the next property change. This
-      // matters on cold start: `MpvClient::start()` applies the seed volume
-      // before our `observe_property("volume")` call lands, so the change
-      // event is lost; the explicit report here carries the value over.
+      // Push initial state so the UI sees current position/volume immediately
       report_progress(&client, &state).await;
       SessionManager::emit_now_playing_changed(&app_handle, &state).await;
 
-      // Track last progress report time to throttle time-pos updates
-      let mut last_progress_report = std::time::Instant::now();
-      let progress_report_interval = std::time::Duration::from_secs(5);
+      log::info!("Listening for MPV events on this connection...");
 
-      // Process events
-      while let Ok(event) = event_rx.recv().await {
-        match event.event.as_str() {
-          "property-change" => {
-            let property_name = event.name.as_deref().unwrap_or("");
-            // Every observed property feeds the Now Playing transport
-            // snapshot, including ones that never trigger a report.
-            update_transport_from_property(&state, &event);
-            let decision = property_report_decision(property_name);
-            let should_report = if decision == PropertyReportDecision::Ignore {
-              false
-            } else {
-              update_state_from_property(&state, &ctx.config, &ctx.mpv, &event);
-              if property_name == "time-pos" {
-                apply_intro_skipper(&state, &action_tx, &event).await;
-              }
+      // Inner loop: process events from THIS connection's channel.
+      // When the channel closes (MPV exits), fall through to cleanup and let
+      // the outer loop retry — it will get a receiver for the new channel.
+      loop {
+        match event_rx.recv().await {
+          Ok(event) => {
+            match event.event.as_str() {
+              "property-change" => {
+                let property_name = event.name.as_deref().unwrap_or("");
+                update_transport_from_property(&state, &event);
+                let decision = property_report_decision(property_name);
+                let should_report = if decision == PropertyReportDecision::Ignore {
+                  false
+                } else {
+                  update_state_from_property(&state, &ctx.config, &ctx.mpv, &event);
+                  if property_name == "time-pos" {
+                    apply_intro_skipper(&state, &action_tx, &event).await;
+                  }
 
-              let now = std::time::Instant::now();
-              let should_report = should_report_progress(
-                decision,
-                now,
-                last_progress_report,
-                progress_report_interval,
-              );
-              if should_report && decision == PropertyReportDecision::ReportWhenThrottleElapsed {
-                last_progress_report = now;
-              }
-              should_report
-            };
+                  let now = std::time::Instant::now();
+                  let should_report = should_report_progress(
+                    decision,
+                    now,
+                    last_progress_report,
+                    progress_report_interval,
+                  );
+                  if should_report && decision == PropertyReportDecision::ReportWhenThrottleElapsed
+                  {
+                    last_progress_report = now;
+                  }
+                  should_report
+                };
 
-            if should_report {
-              report_progress(&client, &state).await;
-              SessionManager::emit_now_playing_changed(&app_handle, &state).await;
-            }
-          }
-          "end-file" => {
-            handle_end_file_event(&event, &ctx).await;
-            SessionManager::emit_now_playing_changed(&app_handle, &state).await;
-          }
-          "client-message" => {
-            handle_client_message_event(&event, &ctx).await;
-            SessionManager::emit_now_playing_changed(&app_handle, &state).await;
-          }
-          "seek" => {
-            // A seek invalidates every prefetched lookahead window
-            let proxy_session_id = {
-              let s = state.read();
-              s.playback
-                .as_ref()
-                .and_then(|playback| playback.hls_proxy_session_id.clone())
-            };
-            if let Some(proxy_session_id) = proxy_session_id {
-              if let Ok(proxy) = hls.current() {
-                proxy.cancel_prefetch(&proxy_session_id);
-              }
-            }
-            // Push the new position to Jellyfin immediately so jellyfin-web's
-            // progress bar reflects MPV-initiated seeks (OSD, keyboard, drag on
-            // MPV window) without waiting for the 5-second progress throttle.
-            // We query MPV for the actual position rather than relying on the
-            // time-pos events that will follow, since those race with our report
-            // and would otherwise show a stale value to jellyfin-web.
-            if let Ok(actual_seconds) = ctx.mpv.get_time_pos().await {
-              let actual_ticks = seconds_to_ticks(actual_seconds);
-              {
-                let mut s = state.write();
-                if let Some(playback) = s.playback.as_mut() {
-                  playback.position_ticks = actual_ticks;
-                  // Reset throttle so the immediate next time-pos event (still
-                  // reporting the old pre-seek value while MPV buffers) does
-                  // not fire a stale report and undo what we just sent.
-                  s.last_report_time = std::time::Instant::now();
+                if should_report {
+                  report_progress(&client, &state).await;
+                  SessionManager::emit_now_playing_changed(&app_handle, &state).await;
                 }
               }
-              report_progress(&client, &state).await;
+              "end-file" => {
+                handle_end_file_event(&event, &ctx).await;
+                SessionManager::emit_now_playing_changed(&app_handle, &state).await;
+              }
+              "client-message" => {
+                handle_client_message_event(&event, &ctx).await;
+                SessionManager::emit_now_playing_changed(&app_handle, &state).await;
+              }
+              "seek" => {
+                let proxy_session_id = {
+                  let s = state.read();
+                  s.playback
+                    .as_ref()
+                    .and_then(|playback| playback.hls_proxy_session_id.clone())
+                };
+                if let Some(proxy_session_id) = proxy_session_id {
+                  if let Ok(proxy) = hls.current() {
+                    proxy.cancel_prefetch(&proxy_session_id);
+                  }
+                }
+                if let Ok(actual_seconds) = ctx.mpv.get_time_pos().await {
+                  let actual_ticks = seconds_to_ticks(actual_seconds);
+                  {
+                    let mut s = state.write();
+                    if let Some(playback) = s.playback.as_mut() {
+                      playback.position_ticks = actual_ticks;
+                      s.last_report_time = std::time::Instant::now();
+                    }
+                  }
+                  report_progress(&client, &state).await;
+                  SessionManager::emit_now_playing_changed(&app_handle, &state).await;
+                }
+              }
+              _ => {
+                // Ignore other events
+              }
             }
           }
-          _ => {
-            // Ignore other events
+          // Channel closed — MPV exited. Clean up and retry on the outer loop
+          // to get a receiver for the new IPC connection (if MPV restarts).
+          Err(_) => {
+            log::warn!("MPV event channel closed, cleaning up...");
+            // Distinguish "MPV was intentionally killed by handle_play as part
+            // of an audio↔video restart, and a new session is already in
+            // state" from "MPV exited unexpectedly and the stale session must
+            // be torn down + reported stopped to Jellyfin". handle_play stamps
+            // `playback_setup_at` the moment it commits the new session; if
+            // that stamp is recent (within a few seconds), the channel close
+            // is the planned restart and we must NOT touch the new session.
+            let recently_replaced = {
+              let s = state.read();
+              match s.playback_setup_at {
+                Some(stamp) => stamp.elapsed() < std::time::Duration::from_secs(5),
+                None => false,
+              }
+            };
+            if recently_replaced {
+              log::info!(
+                "MPV channel closed but playback_setup_at is recent; skipping cleanup (planned audio↔video restart)"
+              );
+            } else {
+              let had_session = {
+                let s = state.read();
+                s.playback.is_some()
+              };
+              if had_session {
+                SessionManager::report_playback_stopped(&client, &state, &hls).await;
+              }
+              clear_playback_context(&client, &state, &hls).await;
+              SessionManager::emit_now_playing_changed(&app_handle, &state).await;
+            }
+            break;
           }
         }
       }
 
-      // MPV event receiver closed - this means MPV died or disconnected
-      // Clear playback context and notify Jellyfin
-      log::warn!("MPV event receiver closed, clearing playback context...");
-      clear_playback_context(&client, &state, &hls).await;
-      SessionManager::emit_now_playing_changed(&app_handle, &state).await;
+      // Channel closed but MPV might restart (e.g. audio→video transition).
+      // The outer loop will retry getting a receiver. If MPV doesn't restart
+      // (e.g. session ended), mpv.events() returns None forever and we spin
+      // here until the session itself is torn down. That's acceptable — the
+      // session exit path handles cleanup.
       tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     }
   });

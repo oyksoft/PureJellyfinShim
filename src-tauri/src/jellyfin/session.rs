@@ -57,6 +57,13 @@ pub(super) struct SessionState {
   /// Unlike `current_item`, this is NOT cleared by `clear_playback_context`
   /// so it survives MPV restarts and event loop state clears.
   pub(super) previous_item_type: Option<bool>,
+  /// Wall-clock time at which `s.playback` was last set up by `handle_play`.
+  /// Used by the MPV event listener's "channel closed" cleanup to distinguish
+  /// a planned MPV restart (audio↔video: handle_play just wrote a new session,
+  /// and the listener must NOT clear it) from an unexpected MPV exit (handle_play
+  /// has not run recently, so the stale session needs to be torn down and
+  /// reported stopped to Jellyfin).
+  pub(super) playback_setup_at: Option<std::time::Instant>,
   /// Current media streams (for looking up track languages).
   pub(super) current_media_streams: Vec<MediaStream>,
   /// Track preferences per series (key: series_id).
@@ -126,7 +133,11 @@ impl SessionManager {
         effective_intro_skipper_config: IntroSkipperRuntimeConfig::from(&*config.read()),
         current_series_id: None,
         current_item: None,
-        previous_item_type: None,
+        // Default to video=true so the first playback is treated as "video
+        // after video" (no MPV restart needed). Audio→video transitions will
+        // correctly detect the type change and restart MPV for a clean window.
+        previous_item_type: Some(true),
+        playback_setup_at: None,
         current_media_streams: Vec::new(),
         series_preferences,
         recorded_notifications: Vec::new(),
@@ -703,6 +714,12 @@ impl SessionManager {
         hls_recovering: false,
       });
       s.last_report_time = std::time::Instant::now();
+      // Stamp the moment the new session was committed. The MPV event listener
+      // uses this to distinguish "MPV died while no Play was in flight"
+      // (unexpected exit → tear down state and report stop to Jellyfin) from
+      // "MPV was intentionally killed by an audio↔video Play, and a new MPV
+      // is about to start" (planned restart → leave the new session alone).
+      s.playback_setup_at = Some(std::time::Instant::now());
       replaced
     };
 
@@ -718,12 +735,14 @@ impl SessionManager {
       hls_lifecycle::start_hls_event_consumer(activated, ctx.clone());
     }
 
-    // When switching between audio and video, report the old session as stopped
-    // so jellyfin-web transitions the session and shows the correct control bar.
-    if prev_is_video != Self::is_video_item(&item) {
-      log::info!("Media type switching: reporting previous session stopped before new playback");
-      Self::report_playback_stopped(&ctx.client, &ctx.state, &ctx.hls).await;
-    }
+    // NOTE: the stop-before-start was already issued above (line ~645) BEFORE
+    // we wrote the new session into state. Do NOT call report_playback_stopped
+    // again here — by this point `state.playback` holds the NEW session, and
+    // report_playback_stopped does `s.playback.take()`, which would silently
+    // drop the new session. The MPV event loop relies on `state.playback` being
+    // present to update position / push seek events; if it's None, all
+    // property-change and seek events are no-ops and the web UI sees stale
+    // progress (the "audio→video seek doesn't sync" bug).
 
     // Report playback started
     let start_volume = ctx
@@ -819,6 +838,14 @@ impl SessionManager {
       } else {
         log::warn!("Failed to build external subtitle URL");
       }
+    }
+
+    // Emit Now Playing immediately so the frontend gets the correct duration
+    // (from the new item's run_time_ticks). Without this, the frontend would
+    // use the OLD item's run_time_ticks until the MPV event loop sends the
+    // first progress report — which is wrong when switching between types.
+    if let Some(ref app) = ctx.app {
+      Self::emit_now_playing_changed(app, &ctx.state).await;
     }
 
     Ok(())
@@ -953,6 +980,10 @@ impl SessionManager {
         log::info!("Processing Stop command");
         // Take the playback session and report stop to Jellyfin
         Self::report_playback_stopped(&ctx.client, &ctx.state, &ctx.hls).await;
+        // Emit to the frontend so jellyfin-web dismisses its control bar.
+        if let Some(app) = ctx.app.as_ref() {
+          Self::emit_now_playing_changed(app, &ctx.state).await;
+        }
 
         let _ = ctx.action_tx.send(MpvAction::Stop).await;
       }
@@ -1735,7 +1766,8 @@ mod tests {
       },
       current_series_id: None,
       current_item: None,
-      previous_item_type: None,
+      previous_item_type: Some(true),
+      playback_setup_at: None,
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
@@ -1781,7 +1813,8 @@ mod tests {
       effective_intro_skipper_config: IntroSkipperRuntimeConfig::from(&AppConfig::default()),
       current_series_id: None,
       current_item: None,
-      previous_item_type: None,
+      previous_item_type: Some(true),
+      playback_setup_at: None,
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
@@ -1822,7 +1855,8 @@ mod tests {
       effective_intro_skipper_config: IntroSkipperRuntimeConfig::from(&AppConfig::default()),
       current_series_id: None,
       current_item: None,
-      previous_item_type: None,
+      previous_item_type: Some(true),
+      playback_setup_at: None,
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
@@ -1879,7 +1913,8 @@ mod tests {
       effective_intro_skipper_config: IntroSkipperRuntimeConfig::from(&AppConfig::default()),
       current_series_id: None,
       current_item: None,
-      previous_item_type: None,
+      previous_item_type: Some(true),
+      playback_setup_at: None,
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
@@ -1973,7 +2008,8 @@ mod tests {
       effective_intro_skipper_config: IntroSkipperRuntimeConfig::from(&AppConfig::default()),
       current_series_id: None,
       current_item: None,
-      previous_item_type: None,
+      previous_item_type: Some(true),
+      playback_setup_at: None,
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
@@ -2927,7 +2963,8 @@ mod regression_tests {
       effective_intro_skipper_config: IntroSkipperRuntimeConfig::from(&AppConfig::default()),
       current_series_id: None,
       current_item: None,
-      previous_item_type: None,
+      previous_item_type: Some(true),
+      playback_setup_at: None,
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),
@@ -3061,7 +3098,8 @@ mod regression_tests {
         run_time_ticks: Some(15_000_000_000),
         overview: None,
       }),
-      previous_item_type: None,
+      previous_item_type: Some(true),
+      playback_setup_at: None,
       current_media_streams: Vec::new(),
       series_preferences: HashMap::new(),
       recorded_notifications: Vec::new(),

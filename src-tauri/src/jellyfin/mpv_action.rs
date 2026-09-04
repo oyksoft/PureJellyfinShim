@@ -252,11 +252,15 @@ impl MpvActionExecutor {
         }
       }
       MpvAction::Stop => {
-        log::info!("MpvAction::Stop - quitting MPV gracefully");
+        log::info!(
+          "MpvAction::Stop - is_connected={}, attempting quit",
+          self.mpv.is_connected()
+        );
         if let Err(e) = self.mpv.quit().await {
           log::warn!("Failed to quit MPV gracefully: {}, forcing stop", e);
           self.mpv.stop().await;
         }
+        log::info!("MpvAction::Stop completed");
       }
       MpvAction::SetVolume(volume) => {
         if let Err(e) = self.mpv.set_volume(volume as f64).await {

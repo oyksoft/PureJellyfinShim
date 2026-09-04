@@ -38,7 +38,15 @@ bun install
 bun tauri build
 ```
 
-构建产物：`src-tauri/target/release/bundle/nsis/PureJellyfinShim_1.5.5_x64-setup.exe`
+构建产物：`src-tauri/target/release/bundle/nsis/PureJellyfinShim_1.5.6_x64-setup.exe`
+
+## v1.5.6 更新
+
+这一版集中修了一批投屏体验上最影响心情的"小毛病"：
+
+- **音频 ↔ 视频之间切换，控制条不会消失了**：之前从音频切到视频（或反过来）的时候，jellyfin-web 端的播放控制条要么直接消失，要么卡在旧位置不同步。这一版修复了状态在切换瞬间被错误清掉的根本问题，audio/video 之间互切现在控制条正常出现，进度条也能跟着 MPV 实时同步。
+- **关闭 MPV 窗口后控制条能正确消失**：之前手动关掉 MPV 窗口后，web 端的控制条还停在那里，状态没清干净。现在关掉 MPV 后控制条会立刻反映"已断开"，不会再出现"我明明关了它还在跑"的诡异感觉。
+- **修复之前漏更新的版本号**：之前版本号只改了前端和 Tauri 配置，Rust crate 的版本号没同步，导致 Jellyfin 服务器侧看到的客户端版本一直停留在 1.5.4。本次一并修正，服务器侧现在会正确显示 1.5.6。
 
 ## v1.5.5 更新
 

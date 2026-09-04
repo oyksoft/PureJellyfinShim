@@ -36,7 +36,11 @@ impl TransportSnapshot {
   }
 
   pub fn clear(&mut self) {
-    *self = Self::default();
+    self.player.connected = false;
+    self.player.paused = true;
+    self.pause = Some(true);
+    self.mute = Some(false);
+    self.volume = None;
   }
 
   pub fn reset_for_new_session(&mut self, _position_seconds: f64) {
