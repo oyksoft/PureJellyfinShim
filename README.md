@@ -38,7 +38,11 @@ bun install
 bun tauri build
 ```
 
-构建产物：`src-tauri/target/release/bundle/nsis/PureJellyfinShim_1.5.6_x64-setup.exe`
+构建产物：`src-tauri/target/release/bundle/nsis/PureJellyfinShim_1.5.7_x64-setup.exe`
+
+## v1.5.7 更新
+
+- **MV（音乐视频）现在能正常弹出 MPV 窗口**：之前投屏 MV（音乐库里的带视频曲目）的时候跟纯音乐一样只放音频不开窗口，看起来"无声无息"。这一版把 `MusicVideo` 类型正确归到视频，投屏 MV 现在会正常弹出 MPV 视频窗口，audio↔MV 切换也会触发 MPV 重启拿到一个干净的窗口。
 
 ## v1.5.6 更新
 

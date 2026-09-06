@@ -2,6 +2,11 @@
 
 All notable changes to JellyPilot are documented in this file.
 
+## [1.5.7] - 2026-09-07
+
+### Fixed
+- **MV（音乐视频）现在能正常弹出 MPV 窗口**：之前 `is_video_item` 只匹配 `Movie` / `Episode` / `Video` / `Series`，把 Jellyfin 的 `MusicVideo` 类型当作音频处理，导致投屏 MV 时只放音频不开窗口（和纯音乐一样 `vid=no`）。`MusicVideo` 是音乐库里带视频的 track，按定义就是视频内容，理应跟电影一样走视频窗口。把它加进匹配列表后，`raise_mpv_window` 触发，`MpvAction::Play` 走 `vid=auto` 而不是 `vid=no`，MP→MV 切换会正确触发 MPV 重启，MV→MV 切换复用现有 MPV 进程。
+
 ## [1.5.6] - 2026-09-04
 
 ### Fixed

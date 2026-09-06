@@ -1,6 +1,6 @@
 [package]
 name = "PureJellyfinShim"
-version = "1.5.6"
+version = "1.5.7"
 description = "PureJellyfinShim - A cast receiver for Jellyfin that controls external MPV"
 authors = ["oyksoft"]
 license = "MIT"

@@ -864,15 +864,22 @@ impl SessionManager {
     }
   }
 
-  /// Returns true when the item is a video (movie, episode, video, etc.).
-  /// Used to gate `raise_mpv` so music playback doesn't pop the window every
-  /// track. Item types are Jellyfin / Emby model values; we only treat the
-  /// well-known video kinds as video and let everything else fall through to
-  /// the "no raise" path.
+  /// Returns true when the item carries a video stream (movie, episode, MV,
+  /// etc.) and therefore needs an MPV video window. Pure music tracks get
+  /// `vid=no` so flac/mp3 albums (which often embed cover art) don't pop a
+  /// cover-art window that gets stuck minimized across track switches.
+  ///
+  /// Item types are Jellyfin / Emby model values:
+  /// * `Movie` / `Episode` / `Video` / `Series` — traditional video.
+  /// * `MusicVideo` — MV tracks within a music library; always have a
+  ///   video stream so they need the same video window as a movie.
+  ///
+  /// Anything else (`Music`, `Audio`, `Book`, `Photo`, …) is audio-only and
+  /// falls through to the no-window path.
   pub(super) fn is_video_item(item: &MediaItem) -> bool {
     matches!(
       item.item_type.as_str(),
-      "Movie" | "Episode" | "Video" | "Series"
+      "Movie" | "Episode" | "Video" | "Series" | "MusicVideo"
     )
   }
 
