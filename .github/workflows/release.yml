@@ -41,25 +41,11 @@ jobs:
             printf '\n%s\n' "$DELIMITER"
           } >> "$GITHUB_OUTPUT"
   build:
-    name: Build (${{ matrix.platform }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: ubuntu-latest
-            artifact-name: linux
-          - platform: windows-latest
-            artifact-name: windows
-    runs-on: ${{ matrix.platform }}
+    name: Build (windows-latest)
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
@@ -75,17 +61,7 @@ jobs:
       - name: Build Application
         run: bun tauri build
 
-      - name: Upload Linux artifacts
-        if: matrix.platform == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-artifacts
-          path: |
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
-
       - name: Upload Windows artifacts
-        if: matrix.platform == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: windows-artifacts
