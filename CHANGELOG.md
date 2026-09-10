@@ -2,6 +2,12 @@
 
 All notable changes to JellyPilot are documented in this file.
 
+## [1.5.8] - 2026-09-10
+
+### Maintenance
+- **删除自动生成的 OpenAPI 客户端 `media-server-api/`**（869 个文件 / 9MB）：直接手写 11 个 API 调用进 `src-tauri/src/jellyfin/client.rs`，Jellyfin 和 Emby 两条 provider 路径行为完全不变。`PureJellyfinShim.exe` 从 16.15 MB 降到 14.14 MB（-12.5%），NSIS 安装包从 4.61 MB 降到 4.31 MB（-6.6%）。
+- **清理 Library Browser 遗骸 + e2e fixture**：删除 3 轮精简中累积的 dead code、`clearLibraryQueries` 残留、orphan 测试、orphan e2e specs 和 7 篇只描述已删除功能的 ADR。`fixture-registry.ts` 命令列表精简到 10 个（仅保留实际使用的）。累计净删除 151,764 行。
+
 ## [1.5.7] - 2026-09-07
 
 ### Fixed
