@@ -76,6 +76,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Strip pure- prefix from ref name
+        id: strip
+        run: |
+          version=$(echo "${{ github.ref_name }}" | sed 's/^pure-//')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -84,7 +90,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: PureJellyfinShim ${{ github.ref_name | replace: 'pure-', '' }}
+          name: PureJellyfinShim ${{ steps.strip.outputs.version }}
           body: ${{ needs.changelog.outputs.release_body }}
           files: artifacts/**/*
           prerelease: ${{ contains(github.ref_name, 'rc') }}
