@@ -12,7 +12,6 @@ import {
   fixtureCallCount,
   fixtureMaxConcurrentCalls,
   fixtureSummary,
-  hasExpectedLibraryPlayCall,
   hasExpectedReauthenticatePasswordCall,
   hasExpectedServerConnectCall,
   installFixture,
@@ -26,7 +25,6 @@ declare global {
       callCount: typeof fixtureCallCount;
       maxConcurrentCalls: typeof fixtureMaxConcurrentCalls;
       fixtureSummary: typeof fixtureSummary;
-      hasExpectedLibraryPlayCall: typeof hasExpectedLibraryPlayCall;
       hasExpectedReauthenticatePasswordCall: typeof hasExpectedReauthenticatePasswordCall;
       hasExpectedServerConnectCall: typeof hasExpectedServerConnectCall;
       installFixture: typeof installFixture;
@@ -49,7 +47,6 @@ const controller: NonNullable<Window['__JELLYPILOT_E2E__']> = {
   callCount: fixtureCallCount,
   maxConcurrentCalls: fixtureMaxConcurrentCalls,
   fixtureSummary,
-  hasExpectedLibraryPlayCall,
   hasExpectedReauthenticatePasswordCall,
   hasExpectedServerConnectCall,
   installFixture,

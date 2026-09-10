@@ -205,9 +205,6 @@ export default function OperationsConsole() {
   const removeProfileMutation = createMutation(() => ({
     mutationFn: (key: string) => runExit(removeSavedServiceProfile(key)),
   }));
-  const clearLibraryQueries = () => {
-    queryClient.removeQueries({ queryKey: queryKeys.libraryRoot });
-  };
   let loggedConfigFailure: string | null = null;
   createEffect(() => {
     const result = configQuery.data;
@@ -476,7 +473,6 @@ export default function OperationsConsole() {
     actions.beginReconnect();
     try {
       if (await reconnectMutation.mutateAsync()) {
-        clearLibraryQueries();
         showToast('success', t().settings.toastReconnectedToSavedService);
         void connectionQuery.refetch();
         void profilesQuery.refetch();
@@ -507,7 +503,6 @@ export default function OperationsConsole() {
     actions.beginDisconnect();
     const exit = await disconnectMutation.mutateAsync();
     if (Exit.isSuccess(exit)) {
-      clearLibraryQueries();
       showToast('success', t().settings.toastDisconnected);
       void connectionQuery.refetch();
     } else {
@@ -521,7 +516,6 @@ export default function OperationsConsole() {
     try {
       const exit = await activateProfileMutation.mutateAsync(key);
       if (Exit.isSuccess(exit)) {
-        clearLibraryQueries();
         showToast('success', t().settings.toastServiceSwitched);
         void connectionQuery.refetch();
         void profilesQuery.refetch();
@@ -566,7 +560,7 @@ export default function OperationsConsole() {
       const exit = await removeProfileMutation.mutateAsync(key);
       if (Exit.isSuccess(exit)) {
         if (profiles()?.activeProfileKey === key) {
-          clearLibraryQueries();
+          // Drop any stale connection state so the UI reflects the removed profile.
         }
         void connectionQuery.refetch();
         void profilesQuery.refetch();
@@ -580,7 +574,6 @@ export default function OperationsConsole() {
   };
 
   const handleAddServiceConnected = () => {
-    clearLibraryQueries();
     closeServiceDialog();
     showToast('success', t().settings.toastServiceAdded);
     void connectionQuery.refetch();
@@ -588,7 +581,6 @@ export default function OperationsConsole() {
   };
 
   const handleReauthenticated = () => {
-    clearLibraryQueries();
     closeServiceDialog();
     showToast('success', t().settings.toastSignedIn);
     void connectionQuery.refetch();

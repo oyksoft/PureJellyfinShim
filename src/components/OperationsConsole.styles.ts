@@ -55,7 +55,7 @@ export const icon4_5 = css({
   width: 'lg',
 });
 
-/* Settings sidebar layout */
+/* Settings in-page section nav layout */
 export const settingsLayout = css({
   display: 'flex',
   alignItems: 'stretch',

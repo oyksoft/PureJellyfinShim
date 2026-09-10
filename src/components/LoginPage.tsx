@@ -3,7 +3,6 @@ import { Field as ArkField } from '@ark-ui/solid/field';
 import { Tabs } from '@ark-ui/solid/tabs';
 import { cx } from '@styled-system/css';
 import { createForm } from '@tanstack/solid-form';
-import { useQueryClient } from '@tanstack/solid-query';
 import { Effect, Exit, Fiber, Match } from 'effect';
 import { Check, CircleAlert, LoaderCircle, Play, RadioTower, Settings, X } from 'lucide-solid';
 import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
@@ -15,7 +14,6 @@ import { commandFailureMessage } from '../effects/commands';
 import { connectJellyfin } from '../effects/connection';
 import { CommandError } from '../effects/errors';
 import { reauthenticateSavedServiceProfileWithPassword } from '../effects/profiles';
-import { queryKeys } from '../effects/query';
 import {
   runQuickConnectWorkflow,
   runSavedProfileQuickConnectWorkflow,
@@ -60,7 +58,6 @@ export default function LoginPage(props: LoginPageProps) {
   const { t, setLocale, supportedLocale } = useI18n();
   const l = () => t().login;
   const [langPopupOpen, setLangPopupOpen] = createSignal(false);
-  const queryClient = useQueryClient();
 
   const languageOptions: { value: 'auto' | 'en' | 'zh'; label: string }[] = [
     { value: 'auto', label: 'Auto / 自动' },
@@ -167,13 +164,11 @@ export default function LoginPage(props: LoginPageProps) {
   };
 
   const finishConnected = async () => {
-    queryClient.removeQueries({ queryKey: queryKeys.libraryRoot });
     await saveCurrentSession();
     props.onConnected();
   };
 
   const finishReauthenticated = () => {
-    queryClient.removeQueries({ queryKey: queryKeys.libraryRoot });
     props.onConnected();
   };
 
@@ -202,7 +197,6 @@ export default function LoginPage(props: LoginPageProps) {
     quickConnectFiber = undefined;
     setSubmitting(false);
     if (Exit.isSuccess(exit)) {
-      queryClient.removeQueries({ queryKey: queryKeys.libraryRoot });
       props.onConnected();
     } else {
       setQuickConnectState('failed');

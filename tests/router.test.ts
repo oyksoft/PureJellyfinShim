@@ -1,6 +1,5 @@
 // @rstest-environment jsdom
 import { afterEach, expect, rstest, test } from '@rstest/core';
-import { createMemoryHistory } from '@tanstack/solid-router';
 
 import { commands } from '../src/bindings';
 import type { SavedServiceProfiles } from '../src/bindings';
@@ -41,13 +40,13 @@ afterEach(() => {
   localStorage.clear();
 });
 
-test('login guard redirects authenticated users to Library', async () => {
+test('login guard redirects authenticated users to the home shell', async () => {
   rstest.spyOn(commands, 'serverIsConnected').mockResolvedValue(true);
 
-  await expectRedirect(redirectLoggedInUsersToLibrary, '/library');
+  await expectRedirect(redirectLoggedInUsersToLibrary, '/home');
 });
 
-test('root guard restores the active saved service profile into Library', async () => {
+test('root guard restores the active saved service profile into the home shell', async () => {
   rstest.spyOn(commands, 'serverIsConnected').mockResolvedValue(false);
   rstest.spyOn(commands, 'serverProfilesGet').mockResolvedValue({
     data: sampleProfiles,
@@ -58,7 +57,7 @@ test('root guard restores the active saved service profile into Library', async 
     status: 'ok',
   });
 
-  await expectRedirect(redirectRootRoute, '/library');
+  await expectRedirect(redirectRootRoute, '/home');
   expect(activate).toHaveBeenCalledWith(sampleProfiles.activeProfileKey);
 });
 
@@ -119,17 +118,6 @@ test('shell guard makes one restore decision and does not double-activate', asyn
   connected.mockResolvedValue(true);
   await requireAuthenticatedShell();
   expect(activate).toHaveBeenCalledTimes(1);
-});
-
-test('browse route redirects unknown collection types to Library', async () => {
-  rstest.spyOn(commands, 'serverIsConnected').mockResolvedValue(true);
-  const router = createJellyPilotRouter(
-    createMemoryHistory({ initialEntries: ['/library/books/abc'] }),
-  );
-
-  await router.load();
-
-  expect(router.state.location.pathname).toBe('/library');
 });
 
 test('removed Settings, Diagnostics, and Console routes are absent from the router', () => {

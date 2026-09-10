@@ -1,7 +1,6 @@
-import { Outlet, createFileRoute, useNavigate } from '@tanstack/solid-router';
+import { Outlet, createFileRoute } from '@tanstack/solid-router';
 
-import { AuthenticatedBootstrapProvider } from '../components/AuthenticatedBootstrap';
-import { AUTHENTICATED_HOME_ROUTE, requireAuthenticatedShell } from '../router-guards';
+import { requireAuthenticatedShell } from '../router-guards';
 
 export const Route = createFileRoute('/_authenticated')({
   beforeLoad: requireAuthenticatedShell,
@@ -9,12 +8,5 @@ export const Route = createFileRoute('/_authenticated')({
 });
 
 function AuthenticatedShell() {
-  const navigate = useNavigate();
-  return (
-    <AuthenticatedBootstrapProvider
-      onSessionChange={() => void navigate({ to: AUTHENTICATED_HOME_ROUTE, replace: true })}
-    >
-      <Outlet />
-    </AuthenticatedBootstrapProvider>
-  );
+  return <Outlet />;
 }

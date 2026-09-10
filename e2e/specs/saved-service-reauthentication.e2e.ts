@@ -5,7 +5,6 @@ import type {
   ConnectionState,
   NowPlayingState,
   SavedServiceProfiles,
-  VideoHome,
 } from '../../src/bindings';
 
 const connectedState = {
@@ -52,13 +51,6 @@ const savedProfiles = {
   ],
 } as const satisfies SavedServiceProfiles;
 
-const videoHome = {
-  continueWatching: [],
-  nextUp: [],
-  latestMovies: [],
-  latestEpisodes: [],
-} as const satisfies VideoHome;
-
 const offlineState = {
   canPlayNext: false,
   canPlayPrevious: false,
@@ -82,7 +74,6 @@ const appConfig = {
   keybindIntroSkip: 'g',
   keybindNext: 'Shift+>',
   keybindPrev: 'Shift+<',
-  mpvArgs: [],
   mpvPath: null,
   preferredSubtitleLanguages: [],
   progressInterval: 5,
@@ -95,8 +86,6 @@ const fixtures = {
   server_profiles_get: savedProfiles,
   config_get: appConfig,
   mpv_is_connected: false,
-  library_video_home: videoHome,
-  library_video_shortcuts: [],
   now_playing_get_state: offlineState,
 } as const;
 
@@ -131,14 +120,6 @@ describe('Saved service reauthentication', () => {
       controller.installFixture('mpv_is_connected', {
         kind: 'return',
         value: values.mpv_is_connected,
-      });
-      controller.installFixture('library_video_home', {
-        kind: 'return',
-        value: values.library_video_home,
-      });
-      controller.installFixture('library_video_shortcuts', {
-        kind: 'return',
-        value: [...values.library_video_shortcuts],
       });
       controller.installFixture('now_playing_get_state', {
         kind: 'return',

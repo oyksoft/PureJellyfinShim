@@ -37,10 +37,6 @@ export default function HomePage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  const clearLibraryQueries = () => {
-    queryClient.removeQueries({ queryKey: queryKeys.libraryRoot });
-  };
-
   // Bumped on each refresh click to remount the status ring pulse element and
   // re-trigger the ping animation. Stays 0 when not animating so the halo
   // isn't rendered.
@@ -95,7 +91,6 @@ export default function HomePage() {
     if (reconnectMutation.isPending) return;
     const success = await reconnectMutation.mutateAsync();
     if (success) {
-      clearLibraryQueries();
       showToast('success', 'Reconnected');
     } else {
       showToast('error', 'Reconnection failed');

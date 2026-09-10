@@ -109,16 +109,7 @@ export const en = {
     shortcutCancel: 'Cancel',
     shortcutResetDefaults: 'Reset to defaults',
     shortcutResetSuccess: 'Shortcuts restored to defaults',
-    // SessionCard
-    session: 'Session',
-    sessionHint:
-      'Sign out removes the active saved service and leaves any other saved services available.',
-    signOut: 'Sign out',
-    signOutConfirm: 'Sign out?',
-    signOutConfirmDesc:
-      'This removes only the active saved service profile. Other saved services remain available in Settings.',
     cancel: 'Cancel',
-    signingOut: 'Signing out...',
     // DiagnosticsCard
     diagnostics: 'Diagnostics',
     expand: 'Expand',
@@ -131,13 +122,6 @@ export const en = {
     copied: 'Copied',
     copyFailed: 'Copy failed',
     diagnosticLogOutput: 'Diagnostic log output',
-    // Service discovery
-    serviceDiscovery: 'Service discovery',
-    discoverServices: 'Discover services',
-    discovering: 'Discovering...',
-    discoveredServices: 'Discovered services',
-    noServicesFound: 'No services found on the network.',
-    addAsService: 'Add',
     // Toast messages
     toastNoActiveSavedService: 'No active saved service is available. Choose a saved service.',
     toastReconnectedToSavedService: 'Reconnected to saved service',

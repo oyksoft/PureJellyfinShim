@@ -1,21 +1,10 @@
 import type {
-  AppLocalServices,
   AppConfig,
   CommandError,
   ConnectionState,
   Credentials,
   NowPlayingState,
   SavedServiceProfiles,
-  VideoHome,
-  VideoItemDetail,
-  VideoItemStreams,
-  VideoLibraryPage,
-  VideoLibraryItem,
-  VideoLibraryShortcut,
-  VideoSearchPage,
-  VideoSeasonEpisodes,
-  VideoShowDetail,
-  VideoUserDataUpdate,
 } from '../../src/bindings';
 
 export const FIXTURE_PASSWORD = 'not-a-secret';
@@ -32,21 +21,8 @@ export const EXPECTED_CREDENTIALS = {
 } as const satisfies Credentials;
 
 interface RawCommandMap {
-  app_local_services: AppLocalServices;
   config_default: unknown;
   config_get: AppConfig;
-  library_browse_video: VideoLibraryPage;
-  library_item_detail: VideoItemDetail;
-  library_item_streams: VideoItemStreams;
-  library_item_shortcut: VideoLibraryShortcut | null;
-  library_play: null;
-  library_season_episodes: VideoSeasonEpisodes;
-  library_show_detail: VideoShowDetail;
-  library_similar_video: VideoLibraryItem[];
-  library_update_user_data: VideoUserDataUpdate;
-  library_search_video: VideoSearchPage;
-  library_video_home: VideoHome;
-  library_video_shortcuts: VideoLibraryShortcut[];
   mpv_is_connected: boolean;
   now_playing_get_state: NowPlayingState;
   server_connect: null;
@@ -58,7 +34,7 @@ interface RawCommandMap {
 }
 
 export type FixtureCommand = keyof RawCommandMap;
-export type SafeRealCommand = 'app_local_services' | 'config_default';
+export type SafeRealCommand = 'config_default';
 
 interface FixtureDelay {
   readonly delayMs?: number;
@@ -75,41 +51,27 @@ type StoredFixtureOutcome = FixtureOutcome;
 type InvokeArgs = Record<string, unknown> | undefined;
 type RealInvoke = <T>(command: string, args?: InvokeArgs) => Promise<T>;
 
-const safeRealCommands = new Set<SafeRealCommand>(['app_local_services', 'config_default']);
+const safeRealCommands = new Set<SafeRealCommand>(['config_default']);
 const fixtures = new Map<FixtureCommand, StoredFixtureOutcome>();
 const calls = new Map<FixtureCommand, InvokeArgs[]>();
 const activeCalls = new Map<FixtureCommand, number>();
 const maxConcurrentCalls = new Map<FixtureCommand, number>();
 
+const FIXTURE_COMMANDS: ReadonlySet<string> = new Set<FixtureCommand>([
+  'config_default',
+  'config_get',
+  'mpv_is_connected',
+  'now_playing_get_state',
+  'server_connect',
+  'server_get_state',
+  'server_is_connected',
+  'server_profiles_activate',
+  'server_profiles_get',
+  'server_profiles_reauthenticate_password',
+]);
+
 function parseFixtureCommand(command: string): FixtureCommand | undefined {
-  if (
-    command === 'app_local_services' ||
-    command === 'config_default' ||
-    command === 'config_get' ||
-    command === 'library_browse_video' ||
-    command === 'library_item_detail' ||
-    command === 'library_item_streams' ||
-    command === 'library_item_shortcut' ||
-    command === 'library_play' ||
-    command === 'library_search_video' ||
-    command === 'library_season_episodes' ||
-    command === 'library_show_detail' ||
-    command === 'library_similar_video' ||
-    command === 'library_update_user_data' ||
-    command === 'library_video_home' ||
-    command === 'library_video_shortcuts' ||
-    command === 'mpv_is_connected' ||
-    command === 'now_playing_get_state' ||
-    command === 'server_connect' ||
-    command === 'server_get_state' ||
-    command === 'server_is_connected' ||
-    command === 'server_profiles_activate' ||
-    command === 'server_profiles_get' ||
-    command === 'server_profiles_reauthenticate_password'
-  ) {
-    return command;
-  }
-  return undefined;
+  return FIXTURE_COMMANDS.has(command) ? (command as FixtureCommand) : undefined;
 }
 
 function recordCall(command: FixtureCommand, args: InvokeArgs): void {
@@ -124,7 +86,6 @@ export function installStartupFixtures(): void {
   activeCalls.clear();
   maxConcurrentCalls.clear();
   fixtures.set('server_is_connected', { kind: 'return', value: false });
-  fixtures.set('app_local_services', { kind: 'real' });
   fixtures.set('server_profiles_get', {
     kind: 'return',
     value: { activeProfileKey: null, profiles: [] },
@@ -169,10 +130,7 @@ export function createControlledInvoke(realInvoke: RealInvoke): RealInvoke {
 
       if (outcome.kind === 'return') return outcome.value as T;
       if (outcome.kind === 'error') throw outcome.error;
-      if (
-        (fixtureCommand !== 'app_local_services' && fixtureCommand !== 'config_default') ||
-        !safeRealCommands.has(fixtureCommand)
-      ) {
+      if (fixtureCommand !== 'config_default' || !safeRealCommands.has(fixtureCommand)) {
         throw new Error(`Rejected unsafe real E2E IPC command: ${command}`);
       }
 
@@ -192,27 +150,6 @@ export function fixtureMaxConcurrentCalls(command: FixtureCommand): number {
 
 export function fixtureSummary(): readonly { command: FixtureCommand; count: number }[] {
   return [...fixtures.keys()].map((command) => ({ command, count: fixtureCallCount(command) }));
-}
-
-export function hasExpectedLibraryPlayCall(): boolean {
-  const commandCalls = calls.get('library_play');
-  if (!commandCalls || commandCalls.length !== 1) return false;
-
-  const request = commandCalls[0]?.request;
-  if (!request || typeof request !== 'object') return false;
-
-  return (
-    'itemId' in request &&
-    request.itemId === 'e2e-home-movie' &&
-    'mode' in request &&
-    request.mode === 'resume' &&
-    'startPositionSeconds' in request &&
-    request.startPositionSeconds === 120 &&
-    'audioStreamIndex' in request &&
-    request.audioStreamIndex === null &&
-    'subtitleStreamIndex' in request &&
-    request.subtitleStreamIndex === null
-  );
 }
 
 export function hasExpectedReauthenticatePasswordCall(expectedKey: string): boolean {

@@ -106,14 +106,7 @@ export const zh = {
     shortcutCancel: '取消',
     shortcutResetDefaults: '恢复默认',
     shortcutResetSuccess: '快捷键已恢复为默认值',
-    // SessionCard
-    session: '会话',
-    sessionHint: '退出登录将移除当前保存的服务，其他已保存的服务仍可用。',
-    signOut: '退出登录',
-    signOutConfirm: '确认退出登录？',
-    signOutConfirmDesc: '此操作仅移除当前保存的服务配置，其他已保存的服务在设置中仍然可用。',
     cancel: '取消',
-    signingOut: '正在退出…',
     // DiagnosticsCard
     diagnostics: '诊断',
     expand: '展开',
@@ -126,13 +119,6 @@ export const zh = {
     copied: '已复制',
     copyFailed: '复制失败',
     diagnosticLogOutput: '诊断日志输出',
-    // Service discovery
-    serviceDiscovery: '服务发现',
-    discoverServices: '发现服务',
-    discovering: '搜索中…',
-    discoveredServices: '发现的服务',
-    noServicesFound: '网络上未发现任何服务。',
-    addAsService: '添加',
     // Toast messages
     toastNoActiveSavedService: '没有可用的已保存服务，请选择一个。',
     toastReconnectedToSavedService: '已重新连接到已保存的服务',
