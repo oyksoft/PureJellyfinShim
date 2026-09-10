@@ -23,25 +23,25 @@
  *
  * If a CHANGELOG heading is already in Chinese, it passes through unchanged.
  */
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
-const REPO_ROOT = join(import.meta.dir, "..");
-const CHANGELOG_PATH = join(REPO_ROOT, "CHANGELOG.md");
-const RELEASE_NOTES_DIR = join(REPO_ROOT, ".github", "release-notes");
+const REPO_ROOT = join(import.meta.dir, '..');
+const CHANGELOG_PATH = join(REPO_ROOT, 'CHANGELOG.md');
+const RELEASE_NOTES_DIR = join(REPO_ROOT, '.github', 'release-notes');
 
 const VERSION_HEADING_RE = /^## \[(\d+\.\d+\.\d+(?:-[\w.]+)?)\] - (\d{4}-\d{2}-\d{2})/;
 const SUBHEADING_RE = /^### ([\s\S]+?)$/;
 const BULLET_RE = /^- ([\s\S]+?)$/;
 
 const HEADING_MAP: Record<string, string> = {
-  Fixed: "修复",
-  Added: "新增",
-  Changed: "变更",
-  Deprecated: "弃用",
-  Removed: "移除",
-  Security: "安全",
-  Maintenance: "清理",
+  Fixed: '修复',
+  Added: '新增',
+  Changed: '变更',
+  Deprecated: '弃用',
+  Removed: '移除',
+  Security: '安全',
+  Maintenance: '清理',
 };
 
 interface ParsedSection {
@@ -59,9 +59,9 @@ function parseChangelog(text: string, version: string): ParsedChangelog | null {
   // Normalize CRLF → LF so Windows-checked-out CHANGELOG.md still parses.
   // Also use [\s\S] (instead of `.`) in the regexes below since `.` does not
   // match line terminators in JavaScript.
-  const lines = text.replaceAll("\r\n", "\n").split("\n");
+  const lines = text.replaceAll('\r\n', '\n').split('\n');
   let start = -1;
-  let date = "";
+  let date = '';
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(VERSION_HEADING_RE);
     if (m && m[1] === version) {
@@ -74,7 +74,7 @@ function parseChangelog(text: string, version: string): ParsedChangelog | null {
 
   let end = lines.length;
   for (let i = start + 1; i < lines.length; i++) {
-    if (lines[i].startsWith("## [")) {
+    if (lines[i].startsWith('## [')) {
       end = i;
       break;
     }
@@ -102,30 +102,30 @@ function parseChangelog(text: string, version: string): ParsedChangelog | null {
 }
 
 function formatReleaseNotes(parsed: ParsedChangelog): string {
-  const lines: string[] = [`## v${parsed.version}`, ""];
+  const lines: string[] = [`## v${parsed.version}`, ''];
   for (const section of parsed.sections) {
     if (section.bullets.length === 0) continue;
-    lines.push(`### ${section.heading}`, "");
+    lines.push(`### ${section.heading}`, '');
     for (const bullet of section.bullets) {
       lines.push(`- ${bullet}`);
     }
-    lines.push("");
+    lines.push('');
   }
   // Trim trailing blank lines but keep exactly one trailing newline
-  return lines.join("\n").replace(/\n+$/, "\n");
+  return lines.join('\n').replace(/\n+$/, '\n');
 }
 
 try {
   const args = process.argv.slice(2);
-  const write = args.includes("--write");
-  const version = args.find((a) => !a.startsWith("--"));
+  const write = args.includes('--write');
+  const version = args.find((a) => !a.startsWith('--'));
   if (!version || !/^\d+\.\d+\.\d+/.test(version)) {
-    console.error("Usage: bun scripts/release-notes.ts <version> [--write]");
-    console.error("Example: bun scripts/release-notes.ts 1.5.8 --write");
+    console.error('Usage: bun scripts/release-notes.ts <version> [--write]');
+    console.error('Example: bun scripts/release-notes.ts 1.5.8 --write');
     process.exit(1);
   }
 
-  const text = await readFile(CHANGELOG_PATH, "utf8");
+  const text = await readFile(CHANGELOG_PATH, 'utf8');
   const parsed = parseChangelog(text, version);
   if (!parsed) {
     console.error(`Error: version [${version}] not found in CHANGELOG.md`);
@@ -141,13 +141,13 @@ try {
 
   if (!write) {
     console.log(`Dry run — would write ${outPath}:`);
-    console.log("---");
+    console.log('---');
     process.stdout.write(output);
-    console.log("---");
+    console.log('---');
     console.log(`(${parsed.sections.length} sections, ${output.length} bytes)`);
-    console.log("Re-run with --write to save.");
+    console.log('Re-run with --write to save.');
   } else {
-    await writeFile(outPath, output, "utf8");
+    await writeFile(outPath, output, 'utf8');
     console.log(`Wrote ${outPath} (${output.length} bytes, ${parsed.sections.length} sections)`);
   }
 } catch (error) {
