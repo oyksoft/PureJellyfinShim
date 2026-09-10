@@ -10,6 +10,7 @@ mod hls_lifecycle;
 mod intro_skipper;
 mod mpv_action;
 mod mpv_event;
+mod openapi_compat;
 mod play_resolution;
 mod playback_events;
 mod session;

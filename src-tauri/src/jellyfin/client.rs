@@ -9,6 +9,7 @@ use super::error::JellyfinError;
 use super::intro_skipper::{
   parse_intro_skipper_ranges, IntroSkipRange, IntroSkipperPluginResponse,
 };
+use super::openapi_compat;
 use super::types::*;
 
 /// Device info for Jellyfin client identification.
@@ -166,181 +167,28 @@ impl JellyfinClient {
     }
   }
 
-  fn openapi_configuration(
-    &self,
-    server_url: &str,
-    token: Option<&str>,
-  ) -> Result<jellyfin_api::apis::configuration::Configuration, JellyfinError> {
-    let mut headers = header::HeaderMap::new();
-    let auth_header = header::HeaderValue::from_str(&self.auth_header(token)).map_err(|err| {
-      JellyfinError::HttpError(format!("Invalid Jellyfin authorization header: {err}"))
-    })?;
-    headers.insert("Authorization", auth_header);
-
-    let mut configuration = jellyfin_api::apis::configuration::Configuration::new();
-    configuration.base_path = server_url.to_string();
-    configuration.user_agent = Some(Self::app_user_agent());
-    configuration.client = Client::builder()
-      .timeout(std::time::Duration::from_secs(30))
-      .default_headers(headers)
-      .build()?;
-
-    Ok(configuration)
-  }
-
-  fn emby_openapi_configuration(
-    &self,
-    server_url: &str,
-    token: Option<&str>,
-  ) -> Result<emby_api::apis::configuration::Configuration, JellyfinError> {
-    let mut headers = header::HeaderMap::new();
-    let auth_header = header::HeaderValue::from_str(&self.auth_header(token)).map_err(|err| {
-      JellyfinError::HttpError(format!("Invalid Emby authorization header: {err}"))
-    })?;
-    headers.insert("Authorization", auth_header);
-
-    let mut configuration = emby_api::apis::configuration::Configuration::new();
-    configuration.base_path = server_url.to_string();
-    configuration.user_agent = Some(Self::emby_chrome_user_agent());
-    configuration.client = Client::builder()
-      .timeout(std::time::Duration::from_secs(30))
-      .default_headers(headers)
-      .build()?;
-
-    Ok(configuration)
-  }
-
-  fn openapi_error<T: std::fmt::Debug>(
-    context: &str,
-    err: jellyfin_api::apis::Error<T>,
-  ) -> JellyfinError {
-    match err {
-      jellyfin_api::apis::Error::Reqwest(err) => JellyfinError::Http(err),
-      jellyfin_api::apis::Error::Serde(err) => JellyfinError::Json(err),
-      jellyfin_api::apis::Error::Io(err) => {
-        JellyfinError::HttpError(format!("{context} failed: {err}"))
-      }
-      jellyfin_api::apis::Error::ResponseError(response) => JellyfinError::HttpError(format!(
-        "{context} failed: HTTP {} - {}",
-        response.status, response.content
-      )),
-    }
-  }
-
-  fn openapi_auth_error<T: std::fmt::Debug>(
-    context: &str,
-    err: jellyfin_api::apis::Error<T>,
-  ) -> JellyfinError {
-    match err {
-      jellyfin_api::apis::Error::ResponseError(response)
-        if matches!(
-          response.status,
-          reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN
-        ) =>
-      {
-        JellyfinError::AuthFailed(format!(
-          "{context} failed: HTTP {} - {}",
-          response.status, response.content
-        ))
-      }
-      err => Self::openapi_error(context, err),
-    }
-  }
-
-  fn emby_openapi_error<T: std::fmt::Debug>(
-    context: &str,
-    err: emby_api::apis::Error<T>,
-  ) -> JellyfinError {
-    match err {
-      emby_api::apis::Error::Reqwest(err) => JellyfinError::Http(err),
-      emby_api::apis::Error::Serde(err) => {
-        JellyfinError::HttpError(format!("{context} returned malformed JSON: {err}"))
-      }
-      emby_api::apis::Error::Io(err) => {
-        JellyfinError::HttpError(format!("{context} failed: {err}"))
-      }
-      emby_api::apis::Error::ResponseError(response) => JellyfinError::HttpError(format!(
-        "{context} failed: HTTP {} - {}",
-        response.status, response.content
-      )),
-    }
-  }
-
-  fn emby_openapi_auth_error<T: std::fmt::Debug>(
-    context: &str,
-    err: emby_api::apis::Error<T>,
-  ) -> JellyfinError {
-    match err {
-      emby_api::apis::Error::ResponseError(response)
-        if matches!(
-          response.status,
-          reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN
-        ) =>
-      {
-        JellyfinError::AuthFailed(format!(
-          "{context} failed: HTTP {} - {}",
-          response.status, response.content
-        ))
-      }
-      err => Self::emby_openapi_error(context, err),
-    }
-  }
-
-  fn missing_openapi_field(context: &str, field: &str) -> JellyfinError {
+  fn missing_field(context: &str, field: &str) -> JellyfinError {
     JellyfinError::HttpError(format!("{context} response missing {field}"))
   }
 
-  fn auth_response_from_openapi(
-    auth: jellyfin_api::models::AuthenticationResult,
+  fn auth_response_from_jellyfin(
+    auth: openapi_compat::JellyfinAuthResponse,
   ) -> Result<AuthResponse, JellyfinError> {
     let user = auth
       .user
-      .flatten()
-      .ok_or_else(|| Self::missing_openapi_field("Authentication", "User"))?;
+      .ok_or_else(|| Self::missing_field("Authentication", "User"))?;
     let id = user
       .id
-      .ok_or_else(|| Self::missing_openapi_field("Authentication", "User.Id"))?;
+      .ok_or_else(|| Self::missing_field("Authentication", "User.Id"))?;
     let name = user
       .name
-      .flatten()
-      .ok_or_else(|| Self::missing_openapi_field("Authentication", "User.Name"))?;
+      .ok_or_else(|| Self::missing_field("Authentication", "User.Name"))?;
     let access_token = auth
       .access_token
-      .flatten()
-      .ok_or_else(|| Self::missing_openapi_field("Authentication", "AccessToken"))?;
+      .ok_or_else(|| Self::missing_field("Authentication", "AccessToken"))?;
     let server_id = auth
       .server_id
-      .flatten()
-      .ok_or_else(|| Self::missing_openapi_field("Authentication", "ServerId"))?;
-
-    Ok(AuthResponse {
-      user: User {
-        id: id.to_string(),
-        name,
-      },
-      access_token,
-      server_id,
-    })
-  }
-
-  fn emby_auth_response_from_openapi(
-    auth: emby_api::models::AuthenticationAuthenticationResult,
-  ) -> Result<AuthResponse, JellyfinError> {
-    let user = auth
-      .user
-      .ok_or_else(|| Self::missing_openapi_field("Authentication", "User"))?;
-    let id = user
-      .id
-      .ok_or_else(|| Self::missing_openapi_field("Authentication", "User.Id"))?;
-    let name = user
-      .name
-      .ok_or_else(|| Self::missing_openapi_field("Authentication", "User.Name"))?;
-    let access_token = auth
-      .access_token
-      .ok_or_else(|| Self::missing_openapi_field("Authentication", "AccessToken"))?;
-    let server_id = auth
-      .server_id
-      .ok_or_else(|| Self::missing_openapi_field("Authentication", "ServerId"))?;
+      .ok_or_else(|| Self::missing_field("Authentication", "ServerId"))?;
 
     Ok(AuthResponse {
       user: User { id, name },
@@ -349,21 +197,44 @@ impl JellyfinClient {
     })
   }
 
-  fn server_info_from_openapi(
-    info: jellyfin_api::models::PublicSystemInfo,
+  fn auth_response_from_emby(
+    auth: openapi_compat::EmbyAuthResponse,
+  ) -> Result<AuthResponse, JellyfinError> {
+    let user = auth
+      .user
+      .ok_or_else(|| Self::missing_field("Authentication", "User"))?;
+    let id = user
+      .id
+      .ok_or_else(|| Self::missing_field("Authentication", "User.Id"))?;
+    let name = user
+      .name
+      .ok_or_else(|| Self::missing_field("Authentication", "User.Name"))?;
+    let access_token = auth
+      .access_token
+      .ok_or_else(|| Self::missing_field("Authentication", "AccessToken"))?;
+    let server_id = auth
+      .server_id
+      .ok_or_else(|| Self::missing_field("Authentication", "ServerId"))?;
+
+    Ok(AuthResponse {
+      user: User { id, name },
+      access_token,
+      server_id,
+    })
+  }
+
+  fn server_info_from_jellyfin(
+    info: openapi_compat::JellyfinPublicSystemInfo,
   ) -> Result<ServerInfo, JellyfinError> {
     let server_name = info
       .server_name
-      .flatten()
-      .ok_or_else(|| Self::missing_openapi_field("System public info", "ServerName"))?;
+      .ok_or_else(|| Self::missing_field("System public info", "ServerName"))?;
     let version = info
       .version
-      .flatten()
-      .ok_or_else(|| Self::missing_openapi_field("System public info", "Version"))?;
+      .ok_or_else(|| Self::missing_field("System public info", "Version"))?;
     let id = info
       .id
-      .flatten()
-      .ok_or_else(|| Self::missing_openapi_field("System public info", "Id"))?;
+      .ok_or_else(|| Self::missing_field("System public info", "Id"))?;
 
     Ok(ServerInfo {
       server_name,
@@ -372,18 +243,18 @@ impl JellyfinClient {
     })
   }
 
-  fn emby_server_info_from_openapi(
-    info: emby_api::models::PublicSystemInfo,
+  fn server_info_from_emby_public(
+    info: openapi_compat::EmbyPublicSystemInfo,
   ) -> Result<ServerInfo, JellyfinError> {
     let server_name = info
       .server_name
-      .ok_or_else(|| Self::missing_openapi_field("System public info", "ServerName"))?;
+      .ok_or_else(|| Self::missing_field("System public info", "ServerName"))?;
     let version = info
       .version
-      .ok_or_else(|| Self::missing_openapi_field("System public info", "Version"))?;
+      .ok_or_else(|| Self::missing_field("System public info", "Version"))?;
     let id = info
       .id
-      .ok_or_else(|| Self::missing_openapi_field("System public info", "Id"))?;
+      .ok_or_else(|| Self::missing_field("System public info", "Id"))?;
 
     Ok(ServerInfo {
       server_name,
@@ -392,18 +263,18 @@ impl JellyfinClient {
     })
   }
 
-  fn emby_server_info_from_authenticated_openapi(
-    info: emby_api::models::SystemInfo,
+  fn server_info_from_emby(
+    info: openapi_compat::EmbySystemInfo,
   ) -> Result<ServerInfo, JellyfinError> {
     let server_name = info
       .server_name
-      .ok_or_else(|| Self::missing_openapi_field("System info", "ServerName"))?;
+      .ok_or_else(|| Self::missing_field("System info", "ServerName"))?;
     let version = info
       .version
-      .ok_or_else(|| Self::missing_openapi_field("System info", "Version"))?;
+      .ok_or_else(|| Self::missing_field("System info", "Version"))?;
     let id = info
       .id
-      .ok_or_else(|| Self::missing_openapi_field("System info", "Id"))?;
+      .ok_or_else(|| Self::missing_field("System info", "Id"))?;
 
     Ok(ServerInfo {
       server_name,
@@ -425,7 +296,7 @@ impl JellyfinClient {
     creds: &Credentials,
   ) -> Result<AuthResponse, JellyfinError> {
     let server_url = Self::normalize_server_url(&creds.server_url)?;
-    let configuration = self.openapi_configuration(&server_url, None)?;
+    let client = openapi_compat::build_client(&self.auth_header(None))?;
 
     // The Jellyfin 12 OpenAPI spec has `additionalProperties: false` on
     // AuthenticateUserByName — the server rejects extra fields. Only send
@@ -434,12 +305,9 @@ impl JellyfinClient {
       "Username": creds.username,
       "Pw": creds.password,
     });
-    let resp = configuration
-      .client
-      .post(format!(
-        "{}/Users/AuthenticateByName",
-        configuration.base_path
-      ))
+    let resp = client
+      .post(format!("{server_url}/Users/AuthenticateByName"))
+      .header(reqwest::header::USER_AGENT, Self::app_user_agent())
       .json(&body)
       .send()
       .await
@@ -449,10 +317,11 @@ impl JellyfinClient {
       let text = resp.text().await.unwrap_or_default();
       return Err(JellyfinError::HttpError(format!("{}: {}", status, text)));
     }
-    let auth: AuthResponse = resp
+    let auth: openapi_compat::JellyfinAuthResponse = resp
       .json()
       .await
       .map_err(|err| JellyfinError::HttpError(format!("Bad auth response: {}", err)))?;
+    let auth = Self::auth_response_from_jellyfin(auth)?;
 
     // Store connection state
     {
@@ -498,12 +367,7 @@ impl JellyfinClient {
     let mut public_info_failures = Vec::new();
 
     for candidate in &candidates {
-      let configuration = self.emby_openapi_configuration(candidate, None)?;
-      match emby_api::apis::system_service_api::get_system_info_public(&configuration)
-        .await
-        .map_err(|err| Self::emby_openapi_error("System public info", err))
-        .and_then(Self::emby_server_info_from_openapi)
-      {
+      match self.fetch_emby_public_info(candidate).await {
         Ok(info) => {
           let auth = self.authenticate_emby_at_base(candidate, creds).await?;
           return Ok((candidate.clone(), auth, Some(info)));
@@ -552,21 +416,34 @@ impl JellyfinClient {
     server_url: &str,
     creds: &Credentials,
   ) -> Result<AuthResponse, JellyfinError> {
-    let configuration = self.emby_openapi_configuration(server_url, None)?;
-
-    emby_api::apis::user_service_api::post_users_authenticatebyname(
-      &configuration,
-      emby_api::apis::user_service_api::PostUsersAuthenticatebynameParams {
-        x_emby_authorization: self.auth_header(None),
-        authenticate_user_by_name: emby_api::models::AuthenticateUserByName {
-          username: Some(creds.username.clone()),
-          pw: Some(creds.password.clone()),
-        },
-      },
-    )
-    .await
-    .map_err(|err| Self::emby_openapi_auth_error("Password authentication", err))
-    .and_then(Self::emby_auth_response_from_openapi)
+    let client = openapi_compat::build_client(&self.auth_header(None))?;
+    let body = openapi_compat::EmbyAuthenticateUserByName {
+      username: creds.username.clone(),
+      pw: creds.password.clone(),
+    };
+    let response = client
+      .post(format!("{server_url}/Users/AuthenticateByName"))
+      .header(reqwest::header::USER_AGENT, Self::emby_chrome_user_agent())
+      .json(&body)
+      .send()
+      .await?;
+    if !response.status().is_success() {
+      let status = response.status();
+      let text = response.text().await.unwrap_or_default();
+      if matches!(
+        status,
+        reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN
+      ) {
+        return Err(JellyfinError::AuthFailed(format!(
+          "Password authentication failed: HTTP {status} - {text}"
+        )));
+      }
+      return Err(JellyfinError::HttpError(format!(
+        "Password authentication failed: HTTP {status} - {text}"
+      )));
+    }
+    let auth: openapi_compat::EmbyAuthResponse = response.json().await?;
+    Self::auth_response_from_emby(auth)
   }
 
   async fn fetch_authenticated_emby_server_info(
@@ -574,12 +451,27 @@ impl JellyfinClient {
     server_url: &str,
     token: &str,
   ) -> Result<ServerInfo, JellyfinError> {
-    let configuration = self.emby_openapi_configuration(server_url, Some(token))?;
+    let client = openapi_compat::build_client(&self.auth_header(Some(token)))?;
+    let response = client
+      .get(format!("{server_url}/System/Info"))
+      .header(reqwest::header::USER_AGENT, Self::emby_chrome_user_agent())
+      .send()
+      .await?;
+    let response = openapi_compat::ensure_success(response, "System info").await?;
+    let info: openapi_compat::EmbySystemInfo = response.json().await?;
+    Self::server_info_from_emby(info)
+  }
 
-    emby_api::apis::system_service_api::get_system_info(&configuration)
-      .await
-      .map_err(|err| Self::emby_openapi_error("System info", err))
-      .and_then(Self::emby_server_info_from_authenticated_openapi)
+  async fn fetch_emby_public_info(&self, server_url: &str) -> Result<ServerInfo, JellyfinError> {
+    let client = openapi_compat::build_client(&self.auth_header(None))?;
+    let response = client
+      .get(format!("{server_url}/System/Info/Public"))
+      .header(reqwest::header::USER_AGENT, Self::emby_chrome_user_agent())
+      .send()
+      .await?;
+    let response = openapi_compat::ensure_success(response, "System public info").await?;
+    let info: openapi_compat::EmbyPublicSystemInfo = response.json().await?;
+    Self::server_info_from_emby_public(info)
   }
 
   /// Start a Quick Connect request on a Jellyfin server.
@@ -588,26 +480,30 @@ impl JellyfinClient {
     server_url: &str,
   ) -> Result<QuickConnectRequest, JellyfinError> {
     let server_url = Self::normalize_server_url(server_url)?;
-    let configuration = self.openapi_configuration(&server_url, None)?;
-
-    let request = jellyfin_api::apis::authentication_api::initiate_quick_connect(&configuration)
-      .await
-      .map_err(|err| match err {
-        jellyfin_api::apis::Error::ResponseError(response)
-          if response.status == reqwest::StatusCode::UNAUTHORIZED =>
-        {
-          JellyfinError::QuickConnectUnavailable
-        }
-        err => Self::openapi_error("Quick Connect initiation", err),
-      })?;
-
+    let client = openapi_compat::build_client(&self.auth_header(None))?;
+    let response = client
+      .post(format!("{server_url}/QuickConnect/Initiate"))
+      .header(reqwest::header::USER_AGENT, Self::app_user_agent())
+      .send()
+      .await?;
+    let status = response.status();
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+      return Err(JellyfinError::QuickConnectUnavailable);
+    }
+    if !status.is_success() {
+      let body = response.text().await.unwrap_or_default();
+      return Err(JellyfinError::HttpError(format!(
+        "Quick Connect initiation failed: HTTP {status} - {body}"
+      )));
+    }
+    let request: openapi_compat::JellyfinQuickConnectRequest = response.json().await?;
     Ok(QuickConnectRequest {
       code: request
         .code
-        .ok_or_else(|| Self::missing_openapi_field("Quick Connect initiation", "Code"))?,
+        .ok_or_else(|| Self::missing_field("Quick Connect initiation", "Code"))?,
       secret: request
         .secret
-        .ok_or_else(|| Self::missing_openapi_field("Quick Connect initiation", "Secret"))?,
+        .ok_or_else(|| Self::missing_field("Quick Connect initiation", "Secret"))?,
     })
   }
 
@@ -618,17 +514,15 @@ impl JellyfinClient {
     secret: &str,
   ) -> Result<QuickConnectStatus, JellyfinError> {
     let server_url = Self::normalize_server_url(server_url)?;
-    let configuration = self.openapi_configuration(&server_url, None)?;
-
-    let state = jellyfin_api::apis::authentication_api::get_quick_connect_state(
-      &configuration,
-      jellyfin_api::apis::authentication_api::GetQuickConnectStateParams {
-        secret: secret.to_string(),
-      },
-    )
-    .await
-    .map_err(|err| Self::openapi_error("Quick Connect status", err))?;
-
+    let client = openapi_compat::build_client(&self.auth_header(None))?;
+    let response = client
+      .get(format!("{server_url}/QuickConnect/State"))
+      .query(&[("secret", secret)])
+      .header(reqwest::header::USER_AGENT, Self::app_user_agent())
+      .send()
+      .await?;
+    let response = openapi_compat::ensure_success(response, "Quick Connect status").await?;
+    let state: openapi_compat::JellyfinQuickConnectState = response.json().await?;
     if state.authenticated.unwrap_or(false) {
       Ok(QuickConnectStatus::Approved)
     } else {
@@ -643,19 +537,20 @@ impl JellyfinClient {
     secret: &str,
   ) -> Result<AuthResponse, JellyfinError> {
     let server_url = Self::normalize_server_url(server_url)?;
-    let configuration = self.openapi_configuration(&server_url, None)?;
-
-    let auth = jellyfin_api::apis::authentication_api::authenticate_with_quick_connect(
-      &configuration,
-      jellyfin_api::apis::authentication_api::AuthenticateWithQuickConnectParams {
-        quick_connect_dto: jellyfin_api::models::QuickConnectDto {
-          secret: secret.to_string(),
-        },
-      },
-    )
-    .await
-    .map_err(|err| Self::openapi_auth_error("Quick Connect authentication", err))
-    .and_then(Self::auth_response_from_openapi)?;
+    let client = openapi_compat::build_client(&self.auth_header(None))?;
+    let body = openapi_compat::JellyfinQuickConnectDto {
+      secret: secret.to_string(),
+    };
+    let response = client
+      .post(format!("{server_url}/Users/AuthenticateWithQuickConnect"))
+      .header(reqwest::header::USER_AGENT, Self::app_user_agent())
+      .json(&body)
+      .send()
+      .await?;
+    let response =
+      openapi_compat::ensure_success_or_auth(response, "Quick Connect authentication").await?;
+    let auth_response: openapi_compat::JellyfinAuthResponse = response.json().await?;
+    let auth = Self::auth_response_from_jellyfin(auth_response)?;
 
     {
       let mut state = self.state.write();
@@ -677,21 +572,17 @@ impl JellyfinClient {
 
     let info = match provider {
       MediaServerProvider::Jellyfin => {
-        let configuration = self.openapi_configuration(&server_url, None)?;
-
-        jellyfin_api::apis::system_api::get_public_system_info(&configuration)
-          .await
-          .map_err(|err| Self::openapi_error("System public info", err))
-          .and_then(Self::server_info_from_openapi)?
+        let client = openapi_compat::build_client(&self.auth_header(None))?;
+        let response = client
+          .get(format!("{server_url}/System/Info/Public"))
+          .header(reqwest::header::USER_AGENT, Self::app_user_agent())
+          .send()
+          .await?;
+        let response = openapi_compat::ensure_success(response, "System public info").await?;
+        let info: openapi_compat::JellyfinPublicSystemInfo = response.json().await?;
+        Self::server_info_from_jellyfin(info)?
       }
-      MediaServerProvider::Emby => {
-        let configuration = self.emby_openapi_configuration(&server_url, None)?;
-
-        emby_api::apis::system_service_api::get_system_info_public(&configuration)
-          .await
-          .map_err(|err| Self::emby_openapi_error("System public info", err))
-          .and_then(Self::emby_server_info_from_openapi)?
-      }
+      MediaServerProvider::Emby => self.fetch_emby_public_info(&server_url).await?,
     };
 
     {
@@ -709,22 +600,23 @@ impl JellyfinClient {
 
     match provider {
       MediaServerProvider::Jellyfin => {
-        let configuration = self.openapi_configuration(&server_url, Some(&token))?;
-
-        jellyfin_api::apis::user_api::get_current_user(&configuration)
-          .await
-          .map_err(|err| Self::openapi_auth_error("Saved session validation", err))?;
+        let client = openapi_compat::build_client(&self.auth_header(Some(&token)))?;
+        let response = client
+          .get(format!("{server_url}/Users/Me"))
+          .header(reqwest::header::USER_AGENT, Self::app_user_agent())
+          .send()
+          .await?;
+        openapi_compat::ensure_success_or_auth(response, "Saved session validation").await?;
       }
       MediaServerProvider::Emby => {
         let user_id = self.user_id()?;
-        let configuration = self.emby_openapi_configuration(&server_url, Some(&token))?;
-
-        emby_api::apis::user_service_api::get_users_by_id(
-          &configuration,
-          emby_api::apis::user_service_api::GetUsersByIdParams { id: user_id },
-        )
-        .await
-        .map_err(|err| Self::emby_openapi_auth_error("Saved session validation", err))?;
+        let client = openapi_compat::build_client(&self.auth_header(Some(&token)))?;
+        let response = client
+          .get(format!("{server_url}/Users/{user_id}"))
+          .header(reqwest::header::USER_AGENT, Self::emby_chrome_user_agent())
+          .send()
+          .await?;
+        openapi_compat::ensure_success_or_auth(response, "Saved session validation").await?;
       }
     }
 
@@ -1346,50 +1238,44 @@ impl JellyfinClient {
     let device_id = self.device_id();
     let server_url = self.server_url()?;
     let token = self.access_token()?;
-    let configuration = self.openapi_configuration(&server_url, Some(&token))?;
-
-    let sessions = jellyfin_api::apis::session_api::get_sessions(
-      &configuration,
-      jellyfin_api::apis::session_api::GetSessionsParams {
-        controllable_by_user_id: None,
-        device_id: None,
-        active_within_seconds: None,
-      },
-    )
-    .await
-    .map_err(|err| Self::openapi_error("Session validation", err))?;
+    let client = openapi_compat::build_client(&self.auth_header(Some(&token)))?;
+    let response = client
+      .get(format!("{server_url}/Sessions"))
+      .header(reqwest::header::USER_AGENT, Self::app_user_agent())
+      .send()
+      .await?;
+    let response = openapi_compat::ensure_success(response, "Session validation").await?;
+    let sessions: Vec<openapi_compat::JellyfinSessionInfo> = response.json().await?;
 
     // Look for our device in the session list
     for session in &sessions {
-      if let Some(session_device_id) = session.device_id.as_ref().and_then(|id| id.as_ref()) {
-        if session_device_id == &device_id {
-          // Found our session! Check if it supports media control
-          let supports_media_control = session.supports_media_control.unwrap_or(false);
-          let supports_remote_control = session.supports_remote_control.unwrap_or(false);
+      if session.device_id.as_deref() == Some(&device_id) {
+        // Found our session! Check if it supports media control
+        let supports_media_control = session.supports_media_control.unwrap_or(false);
+        let supports_remote_control = session.supports_remote_control.unwrap_or(false);
 
-          log::info!(
-            "Found our session: DeviceId={}, SupportsMediaControl={}, SupportsRemoteControl={}",
-            device_id,
-            supports_media_control,
-            supports_remote_control
+        log::info!(
+          "Found our session: DeviceId={}, SupportsMediaControl={}, SupportsRemoteControl={}",
+          device_id,
+          supports_media_control,
+          supports_remote_control
+        );
+
+        log::debug!("Session details: {:?}", session);
+
+        if supports_media_control {
+          let mut state = self.state.write();
+          state.remote_control_available = true;
+          state.remote_control_warning = None;
+          return Ok(());
+        } else {
+          let mut state = self.state.write();
+          state.remote_control_available = false;
+          state.remote_control_warning = Some(
+            "Remote control is unavailable because the server did not grant media control."
+              .to_string(),
           );
-
-          log::debug!("Session details: {:?}", session);
-
-          if supports_media_control {
-            let mut state = self.state.write();
-            state.remote_control_available = true;
-            state.remote_control_warning = None;
-            return Ok(());
-          } else {
-            let mut state = self.state.write();
-            state.remote_control_available = false;
-            state.remote_control_warning = Some(
-              "Remote control is unavailable because the server did not grant media control."
-                .to_string(),
-            );
-            return Err(JellyfinError::SessionNotFound);
-          }
+          return Err(JellyfinError::SessionNotFound);
         }
       }
     }
@@ -1401,21 +1287,9 @@ impl JellyfinClient {
       sessions.len()
     );
     for (i, session) in sessions.iter().enumerate() {
-      let sess_device_id = session
-        .device_id
-        .as_ref()
-        .and_then(|id| id.as_deref())
-        .unwrap_or("?");
-      let sess_device_name = session
-        .device_name
-        .as_ref()
-        .and_then(|name| name.as_deref())
-        .unwrap_or("?");
-      let sess_client = session
-        .client
-        .as_ref()
-        .and_then(|client| client.as_deref())
-        .unwrap_or("?");
+      let sess_device_id = session.device_id.as_deref().unwrap_or("?");
+      let sess_device_name = session.device_name.as_deref().unwrap_or("?");
+      let sess_client = session.client.as_deref().unwrap_or("?");
       let supports_media = session.supports_media_control.unwrap_or(false);
       log::info!(
         "Session[{}]: DeviceId={}, DeviceName={}, Client={}, SupportsMediaControl={}",
@@ -1441,18 +1315,14 @@ impl JellyfinClient {
     let device_id = self.device_id();
     let server_url = self.server_url()?;
     let token = self.access_token()?;
-    let configuration = self.emby_openapi_configuration(&server_url, Some(&token))?;
-
-    let sessions = emby_api::apis::sessions_service_api::get_sessions(
-      &configuration,
-      emby_api::apis::sessions_service_api::GetSessionsParams {
-        controllable_by_user_id: None,
-        device_id: None,
-        id: None,
-      },
-    )
-    .await
-    .map_err(|err| Self::emby_openapi_error("Emby session validation", err))?;
+    let client = openapi_compat::build_client(&self.auth_header(Some(&token)))?;
+    let response = client
+      .get(format!("{server_url}/Sessions"))
+      .header(reqwest::header::USER_AGENT, Self::emby_chrome_user_agent())
+      .send()
+      .await?;
+    let response = openapi_compat::ensure_success(response, "Emby session validation").await?;
+    let sessions: Vec<openapi_compat::EmbySessionInfo> = response.json().await?;
 
     for session in &sessions {
       if let Some(session_device_id) = session.device_id.as_ref() {
