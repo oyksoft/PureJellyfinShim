@@ -18,16 +18,16 @@ jobs:
       - name: Load local agent release notes
         id: release-notes
         env:
-          BODY_FILE: .github/release-notes/${GITHUB_REF_NAME}.md
-          DELIMITER: RELEASE_NOTES_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}
+          BODY_FILE: .github/release-notes/${{ github.ref_name }}.md
+          DELIMITER: RELEASE_NOTES_${{ github.run_id }}_${{ github.run_attempt }}
         run: |
           if [ ! -s "$BODY_FILE" ]; then
             echo "::error::Missing local-agent release notes at $BODY_FILE"
             exit 1
           fi
           IFS= read -r first_line < "$BODY_FILE"
-          if [ "$first_line" != "## ${GITHUB_REF_NAME}" ]; then
-            echo "::error::$BODY_FILE must start with an exact '## ${GITHUB_REF_NAME}' heading"
+          if [ "$first_line" != "## $GITHUB_REF_NAME" ]; then
+            echo "::error::$BODY_FILE must start with an exact '## $GITHUB_REF_NAME' heading"
             exit 1
           fi
           # Write the multi-line release body to $GITHUB_OUTPUT using the
