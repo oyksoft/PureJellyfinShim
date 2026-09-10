@@ -3,14 +3,13 @@
  * Generate a GitHub release-notes file from CHANGELOG.md.
  *
  * Usage:
- *   bun scripts/release-notes.ts <version>            # dry-run, prints to stdout
- *   bun scripts/release-notes.ts <version> --write    # writes the file
+ *   bun scripts/release-notes.ts <ref-name>            # dry-run, prints to stdout
+ *   bun scripts/release-notes.ts <ref-name> --write    # writes the file
  *
- * Reads CHANGELOG.md, extracts the section for `<version>` (e.g. `1.5.8`),
- * and writes `.github/release-notes/v<version>.md`.
- *
- * The first line of the output must be exactly `## <version>` — the
- * release.yml CI job validates this against `GITHUB_REF_NAME`.
+ * Reads CHANGELOG.md, extracts the section for the version embedded in
+ * `<ref-name>` (e.g. `pure-v1.5.8` → CHANGELOG `[1.5.8]` section), and writes
+ * `.github/release-notes/<ref-name>.md` with `## <ref-name>` as the first
+ * line — matching what release.yml expects for `GITHUB_REF_NAME` validation.
  *
  * Heading mapping (Keep-a-Changelog → Chinese release headings):
  *   Fixed       → 修复
@@ -101,8 +100,8 @@ function parseChangelog(text: string, version: string): ParsedChangelog | null {
   return { version, date, sections };
 }
 
-function formatReleaseNotes(parsed: ParsedChangelog): string {
-  const lines: string[] = [`## v${parsed.version}`, ''];
+function formatReleaseNotes(parsed: ParsedChangelog, refName: string): string {
+  const lines: string[] = [`## ${refName}`, ''];
   for (const section of parsed.sections) {
     if (section.bullets.length === 0) continue;
     lines.push(`### ${section.heading}`, '');
@@ -118,10 +117,17 @@ function formatReleaseNotes(parsed: ParsedChangelog): string {
 try {
   const args = process.argv.slice(2);
   const write = args.includes('--write');
-  const version = args.find((a) => !a.startsWith('--'));
-  if (!version || !/^\d+\.\d+\.\d+/.test(version)) {
-    console.error('Usage: bun scripts/release-notes.ts <version> [--write]');
-    console.error('Example: bun scripts/release-notes.ts 1.5.8 --write');
+  const refName = args.find((a) => !a.startsWith('--'));
+  if (!refName || !/^[A-Za-z0-9._-]+-v\d+\.\d+\.\d+/.test(refName)) {
+    console.error('Usage: bun scripts/release-notes.ts <ref-name> [--write]');
+    console.error('Example: bun scripts/release-notes.ts pure-v1.5.8 --write');
+    process.exit(1);
+  }
+
+  // Extract the bare version (e.g. `pure-v1.5.8` → `1.5.8`) for CHANGELOG lookup
+  const version = refName.replace(/^[A-Za-z0-9._-]+-v/, '');
+  if (!/^\d+\.\d+\.\d+/.test(version)) {
+    console.error(`Error: cannot extract version from ref name '${refName}'`);
     process.exit(1);
   }
 
@@ -136,8 +142,8 @@ try {
     process.exit(3);
   }
 
-  const output = formatReleaseNotes(parsed);
-  const outPath = join(RELEASE_NOTES_DIR, `v${version}.md`);
+  const output = formatReleaseNotes(parsed, refName);
+  const outPath = join(RELEASE_NOTES_DIR, `${refName}.md`);
 
   if (!write) {
     console.log(`Dry run — would write ${outPath}:`);

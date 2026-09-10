@@ -2,7 +2,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*.*.*' # Triggers only on tags like v1.0.0, v1.2.3
+      - 'pure-v*.*.*' # Triggers only on tags like pure-v1.0.0, pure-v1.5.8
 
 jobs:
   changelog:
@@ -84,6 +84,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          name: PureJellyfinShim ${{ github.ref_name | replace: 'pure-', '' }}
           body: ${{ needs.changelog.outputs.release_body }}
           files: artifacts/**/*
           prerelease: ${{ contains(github.ref_name, 'rc') }}
